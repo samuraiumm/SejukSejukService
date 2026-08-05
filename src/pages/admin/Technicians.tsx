@@ -105,14 +105,7 @@ export default function Technicians() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Technicians</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage the technician roster. Deactivated technicians can't be assigned to new
-            orders but keep their history intact.
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Button onClick={openAdd}>
           <UserPlus />
           Add Technician

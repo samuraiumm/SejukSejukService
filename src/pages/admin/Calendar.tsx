@@ -146,12 +146,7 @@ export default function Calendar() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-          <p className="text-sm text-muted-foreground">
-            {new Date(year, month).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-          </p>
-        </div>
+        <div />
         <div className="flex items-center gap-1">
           <Button variant="outline" size="sm" onClick={goToToday}>
             Today

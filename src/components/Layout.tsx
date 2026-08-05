@@ -1,15 +1,20 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-// Admin/Manager use the sidebar-based DashboardLayout instead — this simple
-// top-bar layout now only serves the mobile-first Technician role and Login.
 const NAV_BY_ROLE: Record<string, { to: string; label: string }[]> = {
   technician: [{ to: '/technician/jobs', label: 'My Jobs' }],
+}
+
+const TITLE_MAP: Record<string, { title: string }> = {
+  '/technician/jobs': { title: 'My Jobs' },
 }
 
 export default function Layout() {
   const { session, loading, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  const title = TITLE_MAP[location.pathname]?.title
 
   if (loading) {
     return <div className="p-6 text-sm text-slate-400">Loading…</div>
@@ -24,7 +29,12 @@ export default function Layout() {
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-6">
-            <span className="font-semibold text-slate-900">Sejuk Sejuk Service</span>
+            <div>
+              <span className="font-semibold text-slate-900">Sejuk Sejuk Service</span>
+              {title && (
+                <span className="ml-2 text-sm text-slate-400">/ {title}</span>
+              )}
+            </div>
             <nav className="flex gap-1">
               {links.map((link) => (
                 <NavLink

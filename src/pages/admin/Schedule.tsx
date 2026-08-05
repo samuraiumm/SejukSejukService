@@ -49,13 +49,6 @@ export default function Schedule() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Schedule</h1>
-        <p className="text-sm text-muted-foreground">
-          Upcoming orders with a booked date/time, from today onward.
-        </p>
-      </div>
-
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (

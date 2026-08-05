@@ -55,13 +55,6 @@ export default function ReviewQueue() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Review Queue</h1>
-        <p className="text-sm text-muted-foreground">
-          Completed jobs awaiting manager review, then closure.
-        </p>
-      </div>
-
       {loading ? (
         <div className="space-y-4">
           {Array.from({ length: 2 }).map((_, i) => (

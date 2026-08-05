@@ -32,9 +32,6 @@ export default function JobList() {
 
   return (
     <div className="mx-auto max-w-lg">
-      <h1 className="text-xl font-semibold text-slate-900">My Jobs</h1>
-      <p className="mt-1 text-sm text-slate-500">Assigned to {session?.name}</p>
-
       {loading ? (
         <p className="mt-4 text-sm text-slate-500">Loading…</p>
       ) : (

@@ -203,13 +203,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">System overview and metrics</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
             {(['7', '30', 'all'] as Range[]).map((r) => (
               <Button
                 key={r}
@@ -230,8 +225,6 @@ export default function Dashboard() {
             <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
-      </div>
-
       {loading ? (
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

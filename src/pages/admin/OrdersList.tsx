@@ -1,12 +1,28 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, PlusCircle, Search } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  Layers,
+  PackageCheck,
+  PackageOpen,
+  PlusCircle,
+  Search,
+  ShoppingBag,
+} from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import type { Order, OrderStatus, Technician } from '../../types'
 import { STATUS_ORDER } from '../../lib/orderStatus'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Card } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import {
   Select,
@@ -16,18 +32,115 @@ import {
   SelectValue,
 } from '../../components/ui/select'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../components/ui/table'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu'
 import { Skeleton } from '../../components/ui/skeleton'
 
 const PAGE_SIZE = 10
 
+const AVATAR_COLORS = [
+  'bg-blue-100 text-blue-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-700',
+  'bg-violet-100 text-violet-700',
+  'bg-rose-100 text-rose-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-orange-100 text-orange-700',
+  'bg-sky-100 text-sky-700',
+]
+
+const STATUS_DOT: Record<OrderStatus, string> = {
+  New: 'bg-slate-400',
+  Assigned: 'bg-sky-400',
+  'In Progress': 'bg-amber-400',
+  'Job Done': 'bg-violet-400',
+  Reviewed: 'bg-emerald-400',
+  Closed: 'bg-slate-500',
+  Cancelled: 'bg-red-400',
+}
+
+type SortField = 'created_at' | 'order_no' | 'customer_name' | 'service_type' | 'quoted_price' | 'status'
+type SortDir = 'asc' | 'desc'
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
+}
+
+function getAvatarColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
+function generatePages(current: number, total: number): (number | 'ellipsis')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | 'ellipsis')[] = []
+  if (current <= 3) {
+    for (let i = 1; i <= 5; i++) pages.push(i)
+    pages.push('ellipsis')
+    pages.push(total)
+  } else if (current >= total - 2) {
+    pages.push(1)
+    pages.push('ellipsis')
+    for (let i = total - 4; i <= total; i++) pages.push(i)
+  } else {
+    pages.push(1)
+    pages.push('ellipsis')
+    for (let i = current - 1; i <= current + 1; i++) pages.push(i)
+    pages.push('ellipsis')
+    pages.push(total)
+  }
+  return pages
+}
+
+function exportCSV(orders: Order[], technicians: Technician[]) {
+  const header = 'Order No.,Customer,Phone,Service,Technician,Quoted,Status,Created\n'
+  const rows = orders
+    .map((o) => {
+      const tech = technicians.find((t) => t.id === o.assigned_technician_id)
+      return [
+        o.order_no,
+        `"${(o.customer_name ?? '').replace(/"/g, '""')}"`,
+        `"${(o.phone ?? '').replace(/"/g, '""')}"`,
+        `"${(o.service_type ?? '').replace(/"/g, '""')}"`,
+        tech?.name ?? '',
+        Number(o.quoted_price).toFixed(2),
+        o.status,
+        o.created_at,
+      ].join(',')
+    })
+    .join('\n')
+  const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `orders-export-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function OrdersList() {
+  const navigate = useNavigate()
   const [orders, setOrders] = useState<Order[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
@@ -37,6 +150,16 @@ export default function OrdersList() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all')
   const [technicianFilter, setTechnicianFilter] = useState('all')
   const [page, setPage] = useState(1)
+  const [sortField, setSortField] = useState<SortField>('created_at')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const [summary, setSummary] = useState<Record<string, number>>({})
+
+  const debouncedSearch = useDebounce(search, 300)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const prevFilters = useRef({ search: '', status: 'all' as OrderStatus | 'all', tech: 'all' })
 
   useEffect(() => {
     supabase
@@ -47,22 +170,31 @@ export default function OrdersList() {
   }, [])
 
   useEffect(() => {
-    setPage(1)
-  }, [search, statusFilter, technicianFilter])
+    supabase
+      .from('orders')
+      .select('status')
+      .then(({ data }) => {
+        if (!data) return
+        const counts: Record<string, number> = {}
+        for (const row of data as { status: string }[]) {
+          counts[row.status] = (counts[row.status] ?? 0) + 1
+        }
+        setSummary(counts)
+      })
+  }, [])
 
-  useEffect(() => {
-    void load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, statusFilter, technicianFilter, page])
+  const load = useCallback(async () => {
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
 
-  async function load() {
     setLoading(true)
     let query = supabase
       .from('orders')
       .select('*, technicians ( id, name )', { count: 'exact' })
 
-    if (search.trim()) {
-      const term = search.trim().replace(/[,%]/g, '')
+    if (debouncedSearch.trim()) {
+      const term = debouncedSearch.trim().replace(/[,%]/g, '')
       query = query.or(`order_no.ilike.%${term}%,customer_name.ilike.%${term}%`)
     }
     if (statusFilter !== 'all') {
@@ -76,153 +208,435 @@ export default function OrdersList() {
 
     const from = (page - 1) * PAGE_SIZE
     const { data, count } = await query
-      .order('created_at', { ascending: false })
+      .order(sortField, { ascending: sortDir === 'asc' })
       .range(from, from + PAGE_SIZE - 1)
+      .abortSignal(controller.signal)
+
+    if (controller.signal.aborted) return
 
     setOrders((data as unknown as Order[]) ?? [])
     setTotalCount(count ?? 0)
+    setSelectedIds(new Set())
     setLoading(false)
+  }, [debouncedSearch, statusFilter, technicianFilter, page, sortField, sortDir])
+
+  useEffect(() => {
+    const filtersChanged =
+      debouncedSearch !== prevFilters.current.search ||
+      statusFilter !== prevFilters.current.status ||
+      technicianFilter !== prevFilters.current.tech
+
+    if (filtersChanged && page !== 1) {
+      prevFilters.current = { search: debouncedSearch, status: statusFilter, tech: technicianFilter }
+      setPage(1)
+      return
+    }
+
+    prevFilters.current = { search: debouncedSearch, status: statusFilter, tech: technicianFilter }
+    void load()
+  }, [debouncedSearch, statusFilter, technicianFilter, page, sortField, sortDir, load])
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortDir(field === 'created_at' ? 'desc' : 'asc')
+    }
+    setPage(1)
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.size === orders.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(orders.map((o) => o.id)))
+    }
+  }
+
+  function toggleSelect(id: string) {
+    const next = new Set(selectedIds)
+    if (next.has(id)) {
+      next.delete(id)
+    } else {
+      next.add(id)
+    }
+    setSelectedIds(next)
+  }
+
+  function SortIcon({ field }: { field: SortField }) {
+    if (sortField !== field) return <ArrowUpDown className="size-3.5 text-gray-400/50" />
+    return sortDir === 'asc'
+      ? <ArrowUp className="size-3.5 text-gray-700" />
+      : <ArrowDown className="size-3.5 text-gray-700" />
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+  const pages = generatePages(page, totalPages)
+  const allSelected = orders.length > 0 && selectedIds.size === orders.length
+
+  const summaryCards = [
+    {
+      label: 'Total Orders',
+      value: Object.values(summary).reduce((a, b) => a + b, 0),
+      icon: ShoppingBag,
+      color: 'bg-blue-500',
+      bgLight: 'bg-blue-50',
+      textColor: 'text-blue-600',
+    },
+    {
+      label: 'New',
+      value: summary['New'] ?? 0,
+      icon: PackageOpen,
+      color: 'bg-slate-500',
+      bgLight: 'bg-slate-50',
+      textColor: 'text-slate-600',
+    },
+    {
+      label: 'In Progress',
+      value: (summary['Assigned'] ?? 0) + (summary['In Progress'] ?? 0),
+      icon: Layers,
+      color: 'bg-amber-500',
+      bgLight: 'bg-amber-50',
+      textColor: 'text-amber-600',
+    },
+    {
+      label: 'Closed',
+      value: summary['Closed'] ?? 0,
+      icon: PackageCheck,
+      color: 'bg-gray-500',
+      bgLight: 'bg-gray-50',
+      textColor: 'text-gray-600',
+    },
+  ]
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Orders</h1>
-          <p className="text-sm text-muted-foreground">All service orders across branches</p>
-        </div>
-        <Button asChild>
-          <Link to="/admin/new-order">
-            <PlusCircle />
-            New Order
-          </Link>
-        </Button>
+    <div className="space-y-6 p-1">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {summaryCards.map((card) => {
+          const total = summaryCards[0].value
+          const pct = total > 0 ? Math.round((card.value / total) * 100) : 0
+          return (
+            <Card key={card.label} className="p-4 rounded-xl border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                  {card.label}
+                </p>
+                <div className={`flex size-8 items-center justify-center rounded-lg ${card.bgLight}`}>
+                  <card.icon className={`size-4 ${card.textColor}`} />
+                </div>
+              </div>
+              <p className="mt-2 text-2xl font-bold text-gray-900">{card.value}</p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="h-1.5 flex-1 rounded-full bg-gray-100">
+                  <span
+                    className={`block h-full rounded-full ${card.color}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+                <span className="text-[10px] font-medium text-gray-400">{pct}% of total</span>
+              </div>
+            </Card>
+          )
+        })}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search order no. or customer…"
-            className="pl-8"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <Card className="rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search order no. or customer…"
+                  className="pl-9 h-9 text-sm border-gray-200"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as OrderStatus | 'all')}
+              >
+                <SelectTrigger className="h-9 w-[160px] text-sm border-gray-200">
+                  <Filter className="size-3.5 text-gray-400" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  {STATUS_ORDER.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+                <SelectTrigger className="h-9 w-[160px] text-sm border-gray-200">
+                  <Filter className="size-3.5 text-gray-400" />
+                  <SelectValue placeholder="Technician" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All technicians</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
+                  {technicians.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-9 text-gray-600">
+                    <Download className="size-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onClick={() => exportCSV(orders, technicians)}>
+                    <FileSpreadsheet className="size-4" />
+                    Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.print()}>
+                    <FileText className="size-4" />
+                    Export PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button asChild size="sm" className="h-9">
+                <Link to="/admin/new-order">
+                  <PlusCircle className="size-4" />
+                  New Order
+                </Link>
+              </Button>
+            </div>
+          </div>
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as OrderStatus | 'all')}
-        >
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {STATUS_ORDER.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All technicians</SelectItem>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {technicians.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {loading ? 'Loading…' : `${totalCount} order${totalCount === 1 ? '' : 's'}`}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="overflow-x-auto">
           {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-10 w-full" />
+            <div className="p-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
           ) : orders.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No orders match these filters.</p>
+            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+              <Search className="size-10 mb-3 opacity-40" />
+              <p className="text-sm font-medium">No orders match these filters.</p>
+              <p className="text-xs mt-1">Try adjusting your search or filter criteria.</p>
+            </div>
           ) : (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order No.</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Service</TableHead>
-                    <TableHead>Technician</TableHead>
-                    <TableHead>Quoted</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orders.map((o) => (
-                    <TableRow key={o.id} className="cursor-pointer">
-                      <TableCell className="p-0">
-                        <Link
-                          to={`/admin/orders/${o.id}`}
-                          className="block px-2 py-2 font-mono"
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50/80">
+                  <th className="w-10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      className="size-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
+                  <SortHeader
+                    field="order_no"
+                    label="Order No."
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    field="customer_name"
+                    label="Customer"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    field="service_type"
+                    label="Service"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Technician
+                  </th>
+                  <SortHeader
+                    field="quoted_price"
+                    label="Quoted"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    field="status"
+                    label="Status"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                  />
+                  <th className="hidden md:table-cell px-4 py-3">
+                    <SortHeader
+                      field="created_at"
+                      label="Created"
+                      sortField={sortField}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                    />
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders.map((o) => (
+                  <tr
+                    key={o.id}
+                    className="border-b border-gray-100 hover:bg-gray-50/70 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/admin/orders/${o.id}`)}
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                        checked={selectedIds.has(o.id)}
+                        onChange={() => toggleSelect(o.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-mono text-sm font-medium text-primary whitespace-nowrap">
+                      {o.order_no}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${getAvatarColor(o.customer_name ?? '')}`}
                         >
-                          {o.order_no}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{o.customer_name}</TableCell>
-                      <TableCell>{o.service_type}</TableCell>
-                      <TableCell>{o.technicians?.name ?? '—'}</TableCell>
-                      <TableCell>RM {Number(o.quoted_price).toFixed(2)}</TableCell>
-                      <TableCell>
+                          {getInitials(o.customer_name ?? '')}
+                        </div>
+                        <span className="text-sm font-medium text-gray-900">{o.customer_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                        {o.service_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {o.technicians?.name ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      RM {Number(o.quoted_price).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`size-2 rounded-full ${STATUS_DOT[o.status]}`} />
                         <StatusBadge status={o.status} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-
-              <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                <span>
-                  Page {page} of {totalPages}
-                </span>
-                <div className="flex gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                  >
-                    <ChevronLeft />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                    <ChevronRight />
-                  </Button>
-                </div>
-              </div>
-            </>
+                      </div>
+                    </td>
+                    <td className="hidden md:table-cell px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+                      {new Date(o.created_at).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-        </CardContent>
+        </div>
+
+        {!loading && orders.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t border-gray-100">
+            <p className="text-sm text-gray-500">
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCount)} of{' '}
+              {totalCount} results
+            </p>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="h-8 w-8 p-0 border-gray-200"
+                >
+                  <ChevronLeft className="size-4" />
+                </Button>
+                {pages.map((p, i) =>
+                  p === 'ellipsis' ? (
+                    <span
+                      key={`e-${i}`}
+                      className="flex size-8 items-center justify-center text-xs text-gray-400"
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={p === page ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setPage(p)}
+                      className={`h-8 w-8 p-0 text-xs font-medium ${
+                        p === page ? '' : 'border-gray-200 text-gray-600'
+                      }`}
+                    >
+                      {p}
+                    </Button>
+                  ),
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="h-8 w-8 p-0 border-gray-200"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </Card>
     </div>
+  )
+}
+
+function SortHeader({
+  field,
+  label,
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  field: SortField
+  label: string
+  sortField: SortField
+  sortDir: SortDir
+  onSort: (field: SortField) => void
+}) {
+  const active = sortField === field
+  return (
+    <th
+      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100/70 transition-colors whitespace-nowrap"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1.5">
+        {label}
+        {active ? (
+          sortDir === 'asc' ? (
+            <ArrowUp className="size-3.5 text-gray-700" />
+          ) : (
+            <ArrowDown className="size-3.5 text-gray-700" />
+          )
+        ) : (
+          <ArrowUpDown className="size-3.5 text-gray-400/50" />
+        )}
+      </div>
+    </th>
   )
 }

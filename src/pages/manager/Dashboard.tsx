@@ -97,10 +97,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">KPI Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Technician performance overview</p>
-        </div>
+        <div />
         <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
           {(['7', '30'] as Range[]).map((r) => (
             <Button

@@ -142,11 +142,6 @@ export default function NewOrder() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">New Service Order</h1>
-        <p className="text-sm text-muted-foreground">Order No. is auto-generated on submit.</p>
-      </div>
-
       <Card>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

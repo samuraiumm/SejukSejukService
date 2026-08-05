@@ -83,13 +83,6 @@ export default function AuditLog() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Audit Log</h1>
-        <p className="text-sm text-muted-foreground">
-          Every status change and edit, attributed to who did it and when.
-        </p>
-      </div>
-
       <div className="flex flex-wrap items-end gap-2">
         <Select value={roleFilter} onValueChange={(v) => setRoleFilter(v as Role | 'all')}>
           <SelectTrigger className="w-[160px]">

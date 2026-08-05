@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { ArrowLeft, Ban } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
@@ -43,6 +43,7 @@ function toDatetimeLocal(iso: string | null): string {
 export default function OrderDetail() {
   const { id } = useParams<{ id: string }>()
   const { session } = useAuth()
+  const { setPageTitle } = useOutletContext<{ setPageTitle: (t: string) => void }>()
 
   const [order, setOrder] = useState<OrderWithCompletion | null>(null)
   const [technicians, setTechnicians] = useState<Technician[]>([])
@@ -79,6 +80,12 @@ export default function OrderDetail() {
       .order('name')
       .then(({ data }) => setTechnicians((data as Technician[]) ?? []))
   }, [id])
+
+  useEffect(() => {
+    if (order) {
+      setPageTitle(`Order ${order.order_no}`)
+    }
+  }, [order, setPageTitle])
 
   async function load(orderId: string) {
     setLoading(true)
@@ -215,10 +222,7 @@ export default function OrderDetail() {
             <ArrowLeft />
           </Link>
         </Button>
-        <div className="flex-1">
-          <h1 className="font-mono text-xl font-semibold tracking-tight">{order.order_no}</h1>
-          <p className="text-sm text-muted-foreground">{order.customer_name}</p>
-        </div>
+        <div className="flex-1" />
         <StatusBadge status={order.status} />
       </div>
 

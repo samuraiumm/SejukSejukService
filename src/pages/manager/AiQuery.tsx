@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Bot, Send, Sparkles } from 'lucide-react'
+import { Bot, Send } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -56,17 +56,6 @@ export default function AiQuery() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
-          <Sparkles className="size-5 text-primary" />
-          Ask AI — Operations Query
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Answers are generated only from data retrieved through controlled queries — not
-          unrestricted database access.
-        </p>
-      </div>
-
       <div className="flex flex-wrap gap-2">
         {EXAMPLES.map((ex) => (
           <Button key={ex} variant="outline" size="sm" onClick={() => void ask(ex)}>
