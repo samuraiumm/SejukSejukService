@@ -7,6 +7,8 @@ import NewOrder from './pages/admin/NewOrder'
 import OrdersList from './pages/admin/OrdersList'
 import Technicians from './pages/admin/Technicians'
 import OrderDetail from './pages/admin/OrderDetail'
+import AdminDashboard from './pages/admin/Dashboard'
+import Calendar from './pages/admin/Calendar'
 import Schedule from './pages/admin/Schedule'
 import AuditLog from './pages/admin/AuditLog'
 import JobList from './pages/technician/JobList'
@@ -41,10 +43,26 @@ function App() {
 
       <Route element={<DashboardLayout />}>
         <Route
+          path="/admin/dashboard"
+          element={
+            <RequireRole role="admin">
+              <AdminDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
           path="/admin/orders"
           element={
             <RequireRole role="admin">
               <OrdersList />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/admin/calendar"
+          element={
+            <RequireRole role="admin">
+              <Calendar />
             </RequireRole>
           }
         />

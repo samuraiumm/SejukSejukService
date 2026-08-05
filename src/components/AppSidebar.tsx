@@ -1,5 +1,6 @@
 import {
   Bot,
+  CalendarCheck,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
@@ -34,8 +35,10 @@ import { Avatar, AvatarFallback } from './ui/avatar'
 
 const NAV_BY_ROLE = {
   admin: [
+    { to: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/admin/orders', label: 'Orders', icon: ClipboardList },
     { to: '/admin/new-order', label: 'New Order', icon: PlusCircle },
+    { to: '/admin/calendar', label: 'Calendar', icon: CalendarCheck },
     { to: '/admin/schedule', label: 'Schedule', icon: CalendarClock },
     { to: '/admin/technicians', label: 'Technicians', icon: Users },
     { to: '/admin/audit-log', label: 'Audit Log', icon: History },
