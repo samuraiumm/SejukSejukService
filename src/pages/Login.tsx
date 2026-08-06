@@ -6,9 +6,9 @@ import { getErrorMessage } from '../lib/errors'
 import type { Role } from '../types'
 
 const ROLE_HOME: Record<Role, string> = {
-  admin: '/admin/orders',
-  technician: '/technician/jobs',
-  manager: '/manager/review',
+  admin: '/admin/dashboard',
+  technician: '/technician/dashboard',
+  manager: '/manager/dashboard',
 }
 
 export default function Login() {

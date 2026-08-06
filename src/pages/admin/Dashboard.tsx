@@ -75,7 +75,6 @@ export default function Dashboard() {
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [activeIndex, setActiveIndex] = useState<number | null>(null)
 
   const pieTotal = useMemo(
     () => orders.reduce((sum) => sum + 1, 0),
@@ -150,7 +149,7 @@ export default function Dashboard() {
   }, [orders])
 
   const techWorkload = useMemo(() => {
-    const map = new Map<string, Record<string, number>>()
+    const map = new Map<string, { Assigned: number; 'In Progress': number; 'Job Done': number }>()
     for (const o of allOrders) {
       if (!o.assigned_technician_id) continue
       const tech = technicians.find((t) => t.id === o.assigned_technician_id)
@@ -315,10 +314,12 @@ export default function Dashboard() {
                             paddingAngle={3}
                             label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
                               const RADIAN = Math.PI / 180
+                              const pct = percent ?? 0
+                              const angle = midAngle ?? 0
                               const radius = (innerRadius as number) + ((outerRadius as number) - (innerRadius as number)) * 0.6
-                              const x = (cx as number) + radius * Math.cos(-midAngle * RADIAN)
-                              const y = (cy as number) + radius * Math.sin(-midAngle * RADIAN)
-                              if ((percent * 100) < 8) return null
+                              const x = (cx as number) + radius * Math.cos(-angle * RADIAN)
+                              const y = (cy as number) + radius * Math.sin(-angle * RADIAN)
+                              if (pct * 100 < 8) return null
                               return (
                                 <text
                                   x={x}
@@ -328,11 +329,10 @@ export default function Dashboard() {
                                   dominantBaseline="central"
                                   style={{ fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}
                                 >
-                                  {`${(percent * 100).toFixed(0)}%`}
+                                  {`${(pct * 100).toFixed(0)}%`}
                                 </text>
                               )
                             }}
-                            activeIndex={activeIndex !== null ? [activeIndex] : []}
                             activeShape={(props: unknown) => {
                               const p = props as Record<string, unknown>
                               return (
@@ -348,8 +348,6 @@ export default function Dashboard() {
                                 />
                               )
                             }}
-                            onMouseEnter={(_: unknown, index: number) => setActiveIndex(index)}
-                            onMouseLeave={() => setActiveIndex(null)}
                             animationBegin={0}
                             animationDuration={800}
                           >
@@ -533,7 +531,7 @@ export default function Dashboard() {
                           borderRadius: 'var(--radius-md)',
                           fontSize: 13,
                         }}
-                        formatter={(value: number) => [`RM ${value.toFixed(2)}`, 'Revenue']}
+                        formatter={(value) => [`RM ${Number(value).toFixed(2)}`, 'Revenue']}
                       />
                       <Area
                         type="monotone"

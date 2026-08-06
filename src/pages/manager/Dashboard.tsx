@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Bar,
   BarChart,
@@ -8,9 +9,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Briefcase, DollarSign, Users } from 'lucide-react'
+import { AlertTriangle, Briefcase, ClipboardCheck, DollarSign, Users } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
-import type { ServiceCompletion } from '../../types'
+import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
 import {
@@ -35,11 +36,38 @@ interface RescheduleRow {
   orders: { technicians: { name: string } | null } | null
 }
 
+type ReviewOrder = Order & {
+  service_completions: (ServiceCompletion & { completion_attachments: CompletionAttachment[] })[]
+}
+
 export default function Dashboard() {
   const [completions, setCompletions] = useState<ServiceCompletion[]>([])
   const [rescheduleCounts, setRescheduleCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [range, setRange] = useState<Range>('7')
+  const [pendingReview, setPendingReview] = useState(0)
+  const [flaggedCount, setFlaggedCount] = useState(0)
+
+  useEffect(() => {
+    void loadReviewQueueStats()
+  }, [])
+
+  async function loadReviewQueueStats() {
+    const { data } = await supabase
+      .from('orders')
+      .select('*, service_completions ( *, completion_attachments ( * ) )')
+      .eq('status', 'Job Done')
+    const orders = (data as unknown as ReviewOrder[]) ?? []
+    setPendingReview(orders.length)
+    const flagged = orders.filter((o) => {
+      const completion = o.service_completions?.[0]
+      if (!completion) return false
+      const overQuote = Number(completion.final_amount) > Number(o.quoted_price) * 1.3
+      const noPhotos = (completion.completion_attachments?.length ?? 0) === 0
+      return overQuote || noPhotos
+    })
+    setFlaggedCount(flagged.length)
+  }
 
   useEffect(() => {
     void load(range)
@@ -113,14 +141,26 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <StatCard
+              icon={ClipboardCheck}
+              label="Awaiting Review"
+              value={pendingReview.toString()}
+              to="/manager/review"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="Flagged"
+              value={flaggedCount.toString()}
+              to="/manager/review"
+            />
             <StatCard icon={Briefcase} label="Jobs Completed" value={totals.jobs.toString()} />
             <StatCard
               icon={DollarSign}
@@ -206,13 +246,15 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  to,
 }: {
   icon: typeof Briefcase
   label: string
   value: string
+  to?: string
 }) {
-  return (
-    <Card>
+  const content = (
+    <Card className={to ? 'transition-colors hover:bg-accent/50' : ''}>
       <CardContent className="flex items-center justify-between">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -226,4 +268,13 @@ function StatCard({
       </CardContent>
     </Card>
   )
+
+  if (to) {
+    return (
+      <Link to={to} className="block">
+        {content}
+      </Link>
+    )
+  }
+  return <>{content}</>
 }

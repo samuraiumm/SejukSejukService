@@ -59,11 +59,65 @@ function aiQueryDevMiddleware(env: Record<string, string>): Plugin {
   }
 }
 
+/**
+ * Same purpose as aiQueryDevMiddleware, for /api/ai-extract-document.
+ */
+function documentExtractDevMiddleware(env: Record<string, string>): Plugin {
+  return {
+    name: 'ai-extract-document-dev-middleware',
+    configureServer(server) {
+      server.middlewares.use('/api/ai-extract-document', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end(JSON.stringify({ error: 'Method not allowed' }))
+          return
+        }
+        process.env.VITE_SUPABASE_URL ??= env.VITE_SUPABASE_URL
+        process.env.VITE_SUPABASE_ANON_KEY ??= env.VITE_SUPABASE_ANON_KEY
+        process.env.DEEPSEEK_API_KEY ??= env.DEEPSEEK_API_KEY
+
+        let raw = ''
+        for await (const chunk of req) raw += chunk
+        const { extractDocumentFields, DocumentExtractAuthError } = await server.ssrLoadModule(
+          '/server/documentExtractCore.ts',
+        )
+        try {
+          const body = raw ? JSON.parse(raw) : {}
+          const text = typeof body.text === 'string' ? body.text : ''
+          if (!text.trim()) {
+            res.statusCode = 400
+            res.end(JSON.stringify({ error: 'Missing "text" in request body' }))
+            return
+          }
+          const authHeader = req.headers.authorization
+          const accessToken = authHeader?.startsWith('Bearer ')
+            ? authHeader.slice('Bearer '.length)
+            : null
+          const result = await extractDocumentFields(text, accessToken)
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify(result))
+        } catch (err) {
+          if (err instanceof DocumentExtractAuthError) {
+            const authErr = err as { status: number; message: string }
+            res.statusCode = authErr.status
+            res.end(JSON.stringify({ error: authErr.message }))
+            return
+          }
+          res.statusCode = 500
+          res.end(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Document extraction failed' }),
+          )
+        }
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   return {
-    plugins: [react(), tailwindcss(), aiQueryDevMiddleware(env)],
+    plugins: [react(), tailwindcss(), aiQueryDevMiddleware(env), documentExtractDevMiddleware(env)],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

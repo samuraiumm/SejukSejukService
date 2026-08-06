@@ -155,6 +155,7 @@ export default function OrdersList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const [summary, setSummary] = useState<Record<string, number>>({})
+  const [exporting, setExporting] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
   const abortRef = useRef<AbortController | null>(null)
@@ -236,6 +237,31 @@ export default function OrdersList() {
     void load()
   }, [debouncedSearch, statusFilter, technicianFilter, page, sortField, sortDir, load])
 
+  async function handleExportAll() {
+    setExporting(true)
+    try {
+      let query = supabase.from('orders').select('*, technicians ( id, name )')
+
+      if (debouncedSearch.trim()) {
+        const term = debouncedSearch.trim().replace(/[,%]/g, '')
+        query = query.or(`order_no.ilike.%${term}%,customer_name.ilike.%${term}%`)
+      }
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter)
+      }
+      if (technicianFilter === 'unassigned') {
+        query = query.is('assigned_technician_id', null)
+      } else if (technicianFilter !== 'all') {
+        query = query.eq('assigned_technician_id', technicianFilter)
+      }
+
+      const { data } = await query.order(sortField, { ascending: sortDir === 'asc' })
+      exportCSV((data as unknown as Order[]) ?? [], technicians)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   function handleSort(field: SortField) {
     if (sortField === field) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
@@ -262,13 +288,6 @@ export default function OrdersList() {
       next.add(id)
     }
     setSelectedIds(next)
-  }
-
-  function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ArrowUpDown className="size-3.5 text-gray-400/50" />
-    return sortDir === 'asc'
-      ? <ArrowUp className="size-3.5 text-gray-700" />
-      : <ArrowDown className="size-3.5 text-gray-700" />
   }
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
@@ -395,14 +414,14 @@ export default function OrdersList() {
                     Export
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuItem onClick={() => exportCSV(orders, technicians)}>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem disabled={exporting} onClick={() => void handleExportAll()}>
                     <FileSpreadsheet className="size-4" />
-                    Export CSV
+                    {exporting ? 'Exporting…' : 'Export CSV (all matching)'}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => window.print()}>
                     <FileText className="size-4" />
-                    Export PDF
+                    Print current page
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

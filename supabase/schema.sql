@@ -102,6 +102,11 @@ create table if not exists service_completions (
   receipt_photo_url text
 );
 
+-- `started_at` records when the technician tapped "Start Job" (tracked client-side via
+-- localStorage so it survives a page reload), written on completion submit if
+-- available. Added directly to this project's table before schema.sql tracked it.
+alter table service_completions add column if not exists started_at timestamptz;
+
 create index if not exists idx_completions_order on service_completions (order_id);
 
 -- ── completion_attachments ──────────────────────────────────
@@ -154,10 +159,20 @@ create table if not exists profiles (
   name text not null
 );
 
+-- Used to build the "Notify Manager via WhatsApp" deep link when a technician
+-- completes a job (Module 2 bonus). Nullable — set via the dashboard/seed script.
+alter table profiles add column if not exists phone text;
+
 alter table profiles enable row level security;
 
 drop policy if exists "read own profile" on profiles;
 create policy "read own profile" on profiles for select using (auth.uid() = user_id);
+
+-- Lets any signed-in user (in practice: a technician on the completion screen)
+-- look up manager name/phone to build the WhatsApp notify link, without exposing
+-- other technicians' or admins' profile rows.
+drop policy if exists "read manager profiles" on profiles;
+create policy "read manager profiles" on profiles for select using (role = 'manager');
 
 -- ── Auth helper functions ───────────────────────────────────
 -- Used inside RLS policies below. `stable` (not `security definer`): they
@@ -243,6 +258,25 @@ create policy "service_completions select" on service_completions for select
 
 drop policy if exists "service_completions insert" on service_completions;
 create policy "service_completions insert" on service_completions for insert
+  with check (
+    exists (
+      select 1 from orders o
+      where o.id = service_completions.order_id
+        and o.assigned_technician_id = auth_technician_id()
+    )
+  );
+
+-- Lets a technician resume/correct their own completion (e.g. re-attempting after
+-- a dropped connection mid-submit in the field) rather than only ever inserting.
+drop policy if exists "service_completions update" on service_completions;
+create policy "service_completions update" on service_completions for update
+  using (
+    exists (
+      select 1 from orders o
+      where o.id = service_completions.order_id
+        and o.assigned_technician_id = auth_technician_id()
+    )
+  )
   with check (
     exists (
       select 1 from orders o

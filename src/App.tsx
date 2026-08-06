@@ -13,6 +13,8 @@ import Schedule from './pages/admin/Schedule'
 import AuditLog from './pages/admin/AuditLog'
 import JobList from './pages/technician/JobList'
 import JobComplete from './pages/technician/JobComplete'
+import JobHistory from './pages/technician/JobHistory'
+import TechnicianDashboard from './pages/technician/Dashboard'
 import ReviewQueue from './pages/manager/ReviewQueue'
 import Dashboard from './pages/manager/Dashboard'
 import AiQuery from './pages/manager/AiQuery'
@@ -22,23 +24,6 @@ function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Login />} />
-
-        <Route
-          path="/technician/jobs"
-          element={
-            <RequireRole role="technician">
-              <JobList />
-            </RequireRole>
-          }
-        />
-        <Route
-          path="/technician/jobs/:id"
-          element={
-            <RequireRole role="technician">
-              <JobComplete />
-            </RequireRole>
-          }
-        />
       </Route>
 
       <Route element={<DashboardLayout />}>
@@ -128,6 +113,39 @@ function App() {
           element={
             <RequireRole role="manager">
               <AiQuery />
+            </RequireRole>
+          }
+        />
+
+        <Route
+          path="/technician/dashboard"
+          element={
+            <RequireRole role="technician">
+              <TechnicianDashboard />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/technician/history"
+          element={
+            <RequireRole role="technician">
+              <JobHistory />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/technician/jobs"
+          element={
+            <RequireRole role="technician">
+              <JobList />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/technician/jobs/:id"
+          element={
+            <RequireRole role="technician">
+              <JobComplete />
             </RequireRole>
           }
         />

@@ -41,6 +41,7 @@ export interface ServiceCompletion {
   final_amount: number
   remarks: string | null
   technician_name: string
+  started_at: string | null
   completed_at: string
   payment_amount: number | null
   payment_method: string | null

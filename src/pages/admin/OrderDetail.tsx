@@ -6,6 +6,7 @@ import { logAction } from '../../lib/audit'
 import { getErrorMessage } from '../../lib/errors'
 import { canCancel } from '../../lib/orderStatus'
 import { useAuth } from '../../context/AuthContext'
+import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
 import { SERVICE_TYPES, type CompletionAttachment, type Order, type ServiceCompletion, type Technician } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/ui/button'
@@ -91,7 +92,7 @@ export default function OrderDetail() {
     setLoading(true)
     const { data } = await supabase
       .from('orders')
-      .select('*, technicians ( id, name ), service_completions ( *, completion_attachments ( * ) )')
+      .select('*, technicians ( id, name, phone ), service_completions ( *, completion_attachments ( * ) )')
       .eq('id', orderId)
       .single()
     const o = data as unknown as OrderWithCompletion | null
@@ -352,6 +353,29 @@ export default function OrderDetail() {
           </form>
         </CardContent>
       </Card>
+
+      {saved && order.technicians?.phone && (
+        <a
+          href={buildWhatsAppLink(
+            order.technicians.phone,
+            buildJobAssignedMessage({
+              technicianName: order.technicians.name,
+              orderNo: order.order_no,
+              customerName: order.customer_name,
+              address: order.address,
+              serviceType: order.service_type,
+              scheduledAt: order.scheduled_at
+                ? new Date(order.scheduled_at).toLocaleString()
+                : null,
+            }),
+          )}
+          target="_blank"
+          rel="noreferrer"
+          className="block w-full rounded-lg bg-emerald-600 py-2.5 text-center text-sm font-medium text-white hover:bg-emerald-700"
+        >
+          Notify {order.technicians.name} via WhatsApp
+        </a>
+      )}
 
       {completion && (
         <Card>

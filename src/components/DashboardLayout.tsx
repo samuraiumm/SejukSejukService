@@ -16,8 +16,11 @@ const TITLE_MAP: Record<string, string> = {
   '/admin/schedule': 'Schedule',
   '/admin/audit-log': 'Audit Log',
   '/manager/review': 'Review Queue',
-  '/manager/dashboard': 'KPI Dashboard',
+  '/manager/dashboard': 'Dashboard',
   '/manager/ai': 'Ask AI',
+  '/technician/dashboard': 'Dashboard',
+  '/technician/jobs': 'My Jobs',
+  '/technician/history': 'History',
 }
 
 export default function DashboardLayout() {

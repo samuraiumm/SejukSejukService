@@ -23,9 +23,12 @@ const admin = createClient(url, serviceKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 })
 
+// `phone` on the manager account is optional but needed for the "Notify Manager via
+// WhatsApp" button technicians see after completing a job — fill it in with a real
+// number (with country code, e.g. 60123456789) if you want that button to appear.
 const ACCOUNTS = [
   { email: 'admin@sejuksejuk.local', role: 'admin', name: 'Admin' },
-  { email: 'manager@sejuksejuk.local', role: 'manager', name: 'Siti' },
+  { email: 'manager@sejuksejuk.local', role: 'manager', name: 'Helmi', phone: '60178402574' },
   { email: 'ali@sejuksejuk.local', role: 'technician', name: 'Ali', technicianName: 'Ali' },
   { email: 'john@sejuksejuk.local', role: 'technician', name: 'John', technicianName: 'John' },
   { email: 'bala@sejuksejuk.local', role: 'technician', name: 'Bala', technicianName: 'Bala' },
@@ -65,7 +68,10 @@ async function main() {
 
     const { error: profileError } = await admin
       .from('profiles')
-      .upsert({ user_id: userId, role: account.role, name: account.name }, { onConflict: 'user_id' })
+      .upsert(
+        { user_id: userId, role: account.role, name: account.name, phone: account.phone ?? null },
+        { onConflict: 'user_id' },
+      )
     if (profileError) throw new Error(`Failed to upsert profile for ${account.email}: ${profileError.message}`)
 
     if (account.technicianName) {

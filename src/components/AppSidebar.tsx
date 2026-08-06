@@ -44,9 +44,14 @@ const NAV_BY_ROLE = {
     { to: '/admin/audit-log', label: 'Audit Log', icon: History },
   ],
   manager: [
+    { to: '/manager/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/manager/review', label: 'Review Queue', icon: ClipboardCheck },
-    { to: '/manager/dashboard', label: 'KPI Dashboard', icon: LayoutDashboard },
     { to: '/manager/ai', label: 'Ask AI', icon: Bot },
+  ],
+  technician: [
+    { to: '/technician/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/technician/jobs', label: 'My Jobs', icon: ClipboardList },
+    { to: '/technician/history', label: 'History', icon: History },
   ],
 } as const
 
@@ -64,7 +69,7 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const links = session?.role === 'admin' || session?.role === 'manager' ? NAV_BY_ROLE[session.role] : []
+  const links = session?.role ? NAV_BY_ROLE[session.role as keyof typeof NAV_BY_ROLE] ?? [] : []
 
   return (
     <Sidebar collapsible="icon">
