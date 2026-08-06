@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, ImageOff } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
+import { notifyAdmins, notifyTechnician } from '../../lib/notifications'
 import { useAuth } from '../../context/AuthContext'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
@@ -48,6 +49,23 @@ export default function ReviewQueue() {
         actorRole: 'manager',
         actorName: session.name,
       })
+
+      if (toStatus === 'Reviewed' && order.technicians?.id) {
+        await notifyTechnician(order.technicians.id, {
+          title: 'Job reviewed',
+          body: `Your completed job ${order.order_no} has been reviewed by ${session.name}.`,
+          orderId: order.id,
+          link: '/technician/history',
+        })
+      } else if (toStatus === 'Closed') {
+        await notifyAdmins({
+          title: 'Order closed',
+          body: `${order.order_no} has been closed by ${session.name}.`,
+          orderId: order.id,
+          link: '/admin/orders',
+        })
+      }
+
       await load()
     }
     setBusyId(null)

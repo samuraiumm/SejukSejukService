@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Clock, Phone, X } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
+import { notifyManagers } from '../../lib/notifications'
 import { getErrorMessage } from '../../lib/errors'
 import { useAuth } from '../../context/AuthContext'
 import type { Order } from '../../types'
@@ -269,6 +270,13 @@ export default function JobComplete() {
         action: 'Job completed',
         actorRole: 'technician',
         actorName: session.name,
+      })
+
+      await notifyManagers({
+        title: 'Job completed — awaiting review',
+        body: `${order.order_no} completed by ${session.name}. Final amount RM ${finalAmount.toFixed(2)}.`,
+        orderId: order.id,
+        link: '/manager/review',
       })
 
       const { data: managerRows } = await supabase

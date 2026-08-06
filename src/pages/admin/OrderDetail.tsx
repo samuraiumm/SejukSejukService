@@ -3,6 +3,7 @@ import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { ArrowLeft, Ban } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
+import { notifyTechnician } from '../../lib/notifications'
 import { getErrorMessage } from '../../lib/errors'
 import { canCancel } from '../../lib/orderStatus'
 import { useAuth } from '../../context/AuthContext'
@@ -170,6 +171,23 @@ export default function OrderDetail() {
         actorName: session.name,
       })
 
+      const technicianChanged = form.assigned_technician_id !== (order.assigned_technician_id ?? '')
+      if (technicianChanged && form.assigned_technician_id) {
+        await notifyTechnician(form.assigned_technician_id, {
+          title: 'Job assigned to you',
+          body: `${order.order_no} — ${form.service_type} for ${form.customer_name}`,
+          orderId: order.id,
+          link: '/technician/jobs',
+        })
+      } else if (isReschedule && form.assigned_technician_id) {
+        await notifyTechnician(form.assigned_technician_id, {
+          title: 'Job rescheduled',
+          body: `${order.order_no} rescheduled to ${newScheduledAt ? new Date(newScheduledAt).toLocaleString() : 'unscheduled'}`,
+          orderId: order.id,
+          link: '/technician/jobs',
+        })
+      }
+
       setSaved(true)
       setRescheduleReason('')
       await load(order.id)
@@ -200,6 +218,15 @@ export default function OrderDetail() {
         actorRole: 'admin',
         actorName: session.name,
       })
+
+      if (order.assigned_technician_id) {
+        await notifyTechnician(order.assigned_technician_id, {
+          title: 'Job cancelled',
+          body: `${order.order_no} has been cancelled: ${cancelReason}`,
+          orderId: order.id,
+          link: '/technician/jobs',
+        })
+      }
 
       setCancelOpen(false)
       await load(order.id)

@@ -147,6 +147,55 @@ create table if not exists order_reschedules (
 
 create index if not exists idx_reschedules_order on order_reschedules (order_id);
 
+-- ── notifications ───────────────────────────────────────────
+-- In-app notification inbox, one row per (recipient, event). There is no
+-- server-side trigger writing these — the client inserts a row at the same
+-- point it already writes an audit_log entry (order assigned, job completed,
+-- reviewed, closed), addressed to a real auth.users.id. See src/lib/notifications.ts.
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  order_id uuid references orders (id) on delete cascade,
+  title text not null,
+  body text not null,
+  link text,
+  read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_notifications_user on notifications (user_id, read, created_at desc);
+
+alter table notifications enable row level security;
+
+drop policy if exists "notifications select" on notifications;
+create policy "notifications select" on notifications for select
+  using (user_id = auth.uid());
+
+-- Insert is deliberately NOT "only insert your own row" — the entire point is
+-- one user notifying a different one (e.g. a technician notifying every
+-- manager on job completion). Same trust model already used for audit_log:
+-- any signed-in user can write, and the app controls what's actually written.
+drop policy if exists "notifications insert" on notifications;
+create policy "notifications insert" on notifications for insert
+  with check (auth.uid() is not null);
+
+drop policy if exists "notifications update" on notifications;
+create policy "notifications update" on notifications for update
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+-- Broadcast INSERTs over Realtime so the notification bell updates live
+-- without a page refresh. Realtime only ever broadcasts a row to a client
+-- whose own RLS policies would let them SELECT it, so this is safe given the
+-- policy above. Wrapped because Postgres errors (not no-ops) on re-adding a
+-- table already in the publication, and this file is meant to be re-run.
+do $$
+begin
+  alter publication supabase_realtime add table notifications;
+exception
+  when duplicate_object then null;
+end $$;
+
 -- ── profiles ────────────────────────────────────────────────
 -- One row per real login, tells the app whether they're an
 -- admin / technician / manager. Deliberately has NO insert/update
@@ -173,6 +222,12 @@ create policy "read own profile" on profiles for select using (auth.uid() = user
 -- other technicians' or admins' profile rows.
 drop policy if exists "read manager profiles" on profiles;
 create policy "read manager profiles" on profiles for select using (role = 'manager');
+
+-- Same reasoning, mirrored for admin: lets the in-app notification system
+-- resolve "who is Admin" (e.g. when a Manager closes an order) without
+-- exposing other technicians'/managers' profile rows.
+drop policy if exists "read admin profiles" on profiles;
+create policy "read admin profiles" on profiles for select using (role = 'admin');
 
 -- ── Auth helper functions ───────────────────────────────────
 -- Used inside RLS policies below. `stable` (not `security definer`): they

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { AppSidebar } from './AppSidebar'
+import { NotificationBell } from './NotificationBell'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from './ui/sidebar'
 import { Separator } from './ui/separator'
 
@@ -47,6 +48,9 @@ export default function DashboardLayout() {
           <Separator orientation="vertical" className="mr-1 h-4" />
           <div className="min-w-0">
             <h1 className="truncate text-sm font-semibold">{title}</h1>
+          </div>
+          <div className="ml-auto">
+            <NotificationBell />
           </div>
         </header>
         <main className="flex-1 p-6">

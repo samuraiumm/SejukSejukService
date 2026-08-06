@@ -14,6 +14,7 @@ const EXAMPLES = [
   'What jobs did technician Ali complete this week?',
   'Which technician completed the most jobs this week?',
   'How many jobs were completed today?',
+  'Which technician might be overloaded this week?',
 ]
 
 export default function AiQuery() {

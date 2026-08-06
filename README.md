@@ -49,6 +49,11 @@ All modules from the assessment were implemented:
   that answers the three example question types using controlled, parameterized Supabase
   queries — never a raw/unrestricted database query — with DeepSeek used only to phrase
   the final sentence from the retrieved rows.
+- **AI Operational Insight (optional advanced challenge)**: a fourth query type — "Which
+  technician might be overloaded (this week)?" — compares each technician's completed-job
+  count against the team average for the period and flags anyone significantly above it.
+  Same controlled-query pattern as the rest of the AI Module: the comparison is computed
+  in plain code from a parameterized Supabase query, and DeepSeek only phrases the result.
 - **AI Document Understanding (optional advanced challenge)**: on the New Order page,
   Admin can upload a photo of a service request/quote/invoice; it's OCR'd in the browser
   (Tesseract.js), the extracted text is sent to DeepSeek to pull out customer name,
@@ -67,6 +72,17 @@ All modules from the assessment were implemented:
   thumbnails, receipt photo). All three roles now share the same sidebar navigation
   shell (`DashboardLayout`/`AppSidebar`) rather than Technician having a separate,
   simpler mobile header.
+- **In-app notification system (beyond the assessment spec)**: a bell icon in the
+  dashboard header, shared by all three roles, backed by a `notifications` table
+  (`supabase/schema.sql`) and Supabase Realtime — a new notification appears live,
+  without a page refresh, via a `postgres_changes` subscription scoped to the signed-in
+  user (`src/hooks/useNotifications.ts`). Complements the WhatsApp notifications (Module
+  3), which are for the *customer*; this is the in-app channel for *staff*. Wired into
+  every workflow step: Admin assigning/reassigning/rescheduling/cancelling a job notifies
+  the technician; a technician completing a job notifies every Manager; a Manager
+  reviewing a job notifies that technician back, and closing it notifies every Admin
+  (`src/lib/notifications.ts`, called from the same places `logAction()` already is).
+  Clicking a notification marks it read and navigates straight to the relevant page.
 
 Every status change, technician assignment, cancellation, and reschedule is written to
 the `audit_log` table for traceability, per the assessment's basic system rules.
@@ -163,10 +179,16 @@ KPI Dashboard's Postpone/Reschedule column.
 
 1. "How many jobs were completed **today / this week / last week**?"
 2. "Which technician completed the **most jobs** (this week / last week)?"
-3. "What jobs did **technician \<name\>** complete (today / this week / last week)?"
+3. "Which technician **might be overloaded** (this week / last week)?" — flags a
+   technician when 2+ technicians were active in the period, they completed at least 3
+   jobs, and their count is more than 1.4× the team average for that period. Both
+   numbers are an arbitrary but documented heuristic, not a business rule from the
+   assessment — tuned for legibility on small seed datasets, not calibrated against real
+   volume.
+4. "What jobs did **technician \<name\>** complete (today / this week / last week)?"
    (name must be one of the seeded technicians: Ali, John, Bala, Yusoff)
 
-If a question doesn't match any of these three shapes, the assistant returns a fixed
+If a question doesn't match any of these four shapes, the assistant returns a fixed
 message explaining what it can answer and suggests a rephrase — it does not attempt a
 best-effort guess against the database.
 
@@ -216,7 +238,7 @@ a large phone-camera photo with only a generic spinner.
 - Row-level status *sequencing* (e.g. a technician can't skip straight to `Closed`) is
   still enforced only in the UI/mutation layer, not a Postgres state machine — RLS
   enforces *who* can write to a row, not which status transitions are valid.
-- AI query classification only recognizes the three documented question shapes; it does
+- AI query classification only recognizes the four documented question shapes; it does
   not handle multi-part questions, ambiguous phrasing, or technicians outside the
   seeded list.
 - "Postpone / Reschedule" is tracked (`order_reschedules`, populated when Admin changes
@@ -240,11 +262,19 @@ a large phone-camera photo with only a generic spinner.
   data from a public CDN at runtime by default rather than being fully self-hosted, so
   this feature (unlike the rest of the app) needs outbound internet access beyond just
   Supabase/DeepSeek to work.
-- `src/components/Layout.tsx` still contains a Technician nav config left over from
-  before all three roles were unified onto the same sidebar shell — it's now dead code
-  (only the unauthenticated Login page renders through it, and that branch never reaches
-  the nav). Safe to delete, not yet cleaned up.
 - No automated tests.
+- **Notifications insert policy trusts the client**, same model as `audit_log`: any
+  signed-in user can insert a `notifications` row for *any* `user_id`, not just their
+  own — the app decides who gets notified, Postgres doesn't verify the sender is allowed
+  to notify that specific recipient. Acceptable for a small internal tool where every
+  client is the same trusted app, not a public multi-tenant API.
+- Notifications are in-app only — no push, email, or SMS delivery, and nothing is sent
+  if the recipient's browser tab isn't open (no service worker). The bell only reflects
+  what's already in the `notifications` table when the page loads, plus whatever arrives
+  over the live Realtime subscription afterward.
+- An existing project must **re-run `supabase/schema.sql`** to pick up the
+  `notifications` table, its RLS policies, and the "read admin profiles" policy — it's
+  additive and idempotent (safe to run again in full), but it doesn't run itself.
 
 ## Local Setup
 

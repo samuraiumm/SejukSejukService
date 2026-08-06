@@ -246,29 +246,34 @@ export default function Dashboard() {
               label="Total Orders"
               value={stats.totalOrders.toString()}
               to="/admin/orders"
+              tone="bg-brand-50 text-brand-600"
             />
             <StatCard
               icon={DollarSign}
               label="Total Revenue"
               value={`RM ${stats.totalRevenue.toFixed(2)}`}
+              tone="bg-emerald-50 text-emerald-600"
             />
             <StatCard
               icon={Users}
               label="Active Technicians"
               value={stats.activeTechs.toString()}
               to="/admin/technicians"
+              tone="bg-violet-50 text-violet-600"
             />
             <StatCard
               icon={Clock}
               label="Pending Jobs"
               value={stats.pendingJobs.toString()}
               to="/admin/orders"
+              tone="bg-amber-50 text-amber-600"
             />
             <StatCard
               icon={CheckCircle2}
               label="Awaiting Review"
               value={stats.awaitingReview.toString()}
               to="/admin/orders"
+              tone="bg-sky-50 text-sky-600"
             />
           </div>
 
@@ -312,25 +317,69 @@ export default function Dashboard() {
                             innerRadius={60}
                             outerRadius={90}
                             paddingAngle={3}
+                            labelLine={false}
                             label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
                               const RADIAN = Math.PI / 180
                               const pct = percent ?? 0
                               const angle = midAngle ?? 0
-                              const radius = (innerRadius as number) + ((outerRadius as number) - (innerRadius as number)) * 0.6
-                              const x = (cx as number) + radius * Math.cos(-angle * RADIAN)
-                              const y = (cy as number) + radius * Math.sin(-angle * RADIAN)
-                              if (pct * 100 < 8) return null
+                              const cxN = cx as number
+                              const cyN = cy as number
+                              const innerR = innerRadius as number
+                              const outerR = outerRadius as number
+                              const pctLabel = `${(pct * 100).toFixed(0)}%`
+
+                              // Big enough slice: percentage fits inside it, same as before.
+                              if (pct * 100 >= 8) {
+                                const radius = innerR + (outerR - innerR) * 0.6
+                                const x = cxN + radius * Math.cos(-angle * RADIAN)
+                                const y = cyN + radius * Math.sin(-angle * RADIAN)
+                                return (
+                                  <text
+                                    x={x}
+                                    y={y}
+                                    fill="white"
+                                    textAnchor="middle"
+                                    dominantBaseline="central"
+                                    style={{ fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}
+                                  >
+                                    {pctLabel}
+                                  </text>
+                                )
+                              }
+
+                              // Slice too thin for text to fit inside it: draw the percentage just
+                              // outside the ring instead, connected back to its slice by a short
+                              // leader line — so every status still shows its number on the chart
+                              // itself, not only in the legend below.
+                              const start = {
+                                x: cxN + outerR * Math.cos(-angle * RADIAN),
+                                y: cyN + outerR * Math.sin(-angle * RADIAN),
+                              }
+                              const bend = {
+                                x: cxN + (outerR + 14) * Math.cos(-angle * RADIAN),
+                                y: cyN + (outerR + 14) * Math.sin(-angle * RADIAN),
+                              }
+                              const isRight = bend.x >= cxN
+                              const labelX = bend.x + (isRight ? 8 : -8)
                               return (
-                                <text
-                                  x={x}
-                                  y={y}
-                                  fill="white"
-                                  textAnchor="middle"
-                                  dominantBaseline="central"
-                                  style={{ fontSize: 12, fontWeight: 600, pointerEvents: 'none' }}
-                                >
-                                  {`${(pct * 100).toFixed(0)}%`}
-                                </text>
+                                <g style={{ pointerEvents: 'none' }}>
+                                  <path
+                                    d={`M${start.x},${start.y} L${bend.x},${bend.y} L${labelX},${bend.y}`}
+                                    stroke="var(--muted-foreground)"
+                                    strokeWidth={1}
+                                    fill="none"
+                                  />
+                                  <text
+                                    x={labelX + (isRight ? 2 : -2)}
+                                    y={bend.y}
+                                    textAnchor={isRight ? 'start' : 'end'}
+                                    dominantBaseline="central"
+                                    className="fill-foreground"
+                                    style={{ fontSize: 11, fontWeight: 600 }}
+                                  >
+                                    {pctLabel}
+                                  </text>
+                                </g>
                               )
                             }}
                             activeShape={(props: unknown) => {
@@ -350,6 +399,7 @@ export default function Dashboard() {
                             }}
                             animationBegin={0}
                             animationDuration={800}
+                            isAnimationActive={false}
                           >
                             {statusData.map((entry) => (
                               <Cell
@@ -362,12 +412,27 @@ export default function Dashboard() {
                             <Label
                               position="center"
                               content={({ viewBox }) => {
-                                const vb = viewBox as { cx: number; cy: number }
+                                // This Recharts version hands a Cartesian plot-area rectangle here
+                                // ({x, y, width, height}), not a polar {cx, cy} pair — the donut's
+                                // actual center has to be derived from it. Using vb.cx/vb.cy directly
+                                // (both always undefined) is what produced NaN coordinates before.
+                                if (
+                                  !viewBox ||
+                                  !('x' in viewBox) ||
+                                  !('y' in viewBox) ||
+                                  !('width' in viewBox) ||
+                                  !('height' in viewBox)
+                                ) {
+                                  return null
+                                }
+                                const vb = viewBox as { x: number; y: number; width: number; height: number }
+                                const cx = vb.x + vb.width / 2
+                                const cy = vb.y + vb.height / 2
                                 return (
                                   <g>
                                     <text
-                                      x={vb.cx}
-                                      y={vb.cy - 8}
+                                      x={cx}
+                                      y={cy - 8}
                                       textAnchor="middle"
                                       dominantBaseline="middle"
                                       className="fill-muted-foreground"
@@ -376,8 +441,8 @@ export default function Dashboard() {
                                       Total
                                     </text>
                                     <text
-                                      x={vb.cx}
-                                      y={vb.cy + 14}
+                                      x={cx}
+                                      y={cy + 14}
                                       textAnchor="middle"
                                       dominantBaseline="middle"
                                       className="fill-foreground"
@@ -612,14 +677,16 @@ function StatCard({
   label,
   value,
   to,
+  tone = 'bg-accent text-accent-foreground',
 }: {
   icon: typeof Briefcase
   label: string
   value: string
   to?: string
+  tone?: string
 }) {
   const content = (
-    <Card className={to ? 'transition-colors hover:bg-accent/50' : ''}>
+    <Card className={to ? 'transition-shadow hover:shadow-md' : ''}>
       <CardContent className="flex items-center justify-between py-5">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -627,7 +694,7 @@ function StatCard({
           </p>
           <p className="mt-1 text-2xl font-semibold">{value}</p>
         </div>
-        <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
+        <div className={`flex size-10 items-center justify-center rounded-lg ${tone}`}>
           <Icon className="size-5" />
         </div>
       </CardContent>

@@ -171,7 +171,55 @@ export async function answerOperationsQuery(
     return { answer, matchedQueryType: 'top_technician', rows }
   }
 
-  // Query type 3: "what jobs did technician <name> complete ..."
+  // Query type 3: "which technician might be overloaded (this week)?"
+  if (/overload|too many jobs|too busy|workload/.test(q)) {
+    const { range, label } = detectRange(q)
+    const { from, to } = rangeBounds(range)
+    const { data } = await supabase
+      .from('service_completions')
+      .select('id, technician_name, completed_at')
+      .gte('completed_at', from.toISOString())
+      .lte('completed_at', to.toISOString())
+    const rows = data ?? []
+    const counts = new Map<string, number>()
+    for (const r of rows) counts.set(r.technician_name, (counts.get(r.technician_name) ?? 0) + 1)
+    const perTechnician = [...counts.entries()].sort((a, b) => b[1] - a[1])
+    const activeCount = perTechnician.length
+    const average = activeCount > 0 ? rows.length / activeCount : 0
+    // Flag a technician as overloaded only when there's an actual team to compare
+    // against (2+ active technicians) and their count is both meaningfully above
+    // average and not just noise from one or two jobs.
+    const OVERLOAD_RATIO = 1.4
+    const MIN_JOBS = 3
+    const overloaded =
+      activeCount > 1
+        ? perTechnician.filter(([, count]) => count >= MIN_JOBS && count > average * OVERLOAD_RATIO)
+        : []
+    const fallback =
+      activeCount === 0
+        ? `No jobs were completed ${label}, so there's no workload data to compare.`
+        : overloaded.length === 0
+          ? `No technician appears overloaded ${label} — job counts are fairly balanced (team average ${average.toFixed(1)}).`
+          : overloaded
+              .map(
+                ([name, count]) =>
+                  `Technician ${name} completed ${count} jobs ${label}, which is significantly higher than the team average of ${average.toFixed(1)}.`,
+              )
+              .join(' ')
+    const answer = await phraseWithDeepSeek(
+      `Question: "${question}"\nJobs completed per technician (${label}): ${JSON.stringify(
+        perTechnician,
+      )}\nTeam average: ${average.toFixed(1)}`,
+      fallback,
+    )
+    return {
+      answer,
+      matchedQueryType: 'overloaded_technician',
+      rows: perTechnician.map(([technician_name, jobs_completed]) => ({ technician_name, jobs_completed })),
+    }
+  }
+
+  // Query type 4: "what jobs did technician <name> complete ..."
   const technician = detectTechnician(q)
   if (technician && /job/.test(q)) {
     const { range, label } = detectRange(q)
@@ -197,8 +245,8 @@ export async function answerOperationsQuery(
   return {
     answer:
       "I can only answer questions about: jobs completed in a period (today / this week / last week), " +
-      'which technician completed the most jobs, or what jobs a named technician completed. ' +
-      'Try rephrasing, e.g. "What jobs did Ali complete this week?"',
+      'which technician completed the most jobs, which technician might be overloaded, or what jobs a ' +
+      'named technician completed. Try rephrasing, e.g. "What jobs did Ali complete this week?"',
     matchedQueryType: null,
     rows: [],
   }

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, FileScan, Loader2, ScanText, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
+import { notifyTechnician } from '../../lib/notifications'
 import { getErrorMessage } from '../../lib/errors'
 import { extractTextFromImage } from '../../lib/ocr'
 import { useAuth } from '../../context/AuthContext'
@@ -187,6 +188,15 @@ export default function NewOrder() {
         actorRole: 'admin',
         actorName: session?.name ?? 'Admin',
       })
+
+      if (form.assigned_technician_id) {
+        await notifyTechnician(form.assigned_technician_id, {
+          title: 'New job assigned',
+          body: `${inserted.order_no} — ${form.service_type} for ${form.customer_name}`,
+          orderId: inserted.id,
+          link: '/technician/jobs',
+        })
+      }
 
       const assignedTech = technicians.find((t) => t.id === form.assigned_technician_id)
       setSummary({
