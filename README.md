@@ -246,14 +246,23 @@ a large phone-camera photo with only a generic spinner.
   only reschedules of orders that already had a `scheduled_at` count — setting the first
   schedule on a previously-unscheduled order is treated as a normal edit, not a
   reschedule, since there's nothing to postpone yet.
-- Row-selection checkboxes on the Orders list (select-all, per-row) aren't wired to a
-  bulk action yet — e.g., bulk-assigning a technician to several `New` orders at once.
-  CSV export doesn't depend on selection; it exports every row matching the current
-  filters, not just the selected ones.
+- Row-selection checkboxes on the Orders list support one bulk action: assigning a
+  technician to every selected order at once (bumping status `New → Assigned` for
+  previously-unassigned ones, same rule as the single-order edit form). Selection is
+  page-scoped (selecting "all" selects the current page, not every filtered row) and
+  there's no bulk status change, cancel, or reassignment-with-notification-suppressed —
+  just the one action. CSV export doesn't depend on selection either way; it exports
+  every row matching the current filters.
 - The `job-attachments` Storage bucket is marked "public" at the bucket level (so
-  `<img>`/download links work directly), but read/write through the API requires a real
-  signed-in session — it isn't scoped further to "only the assigned technician can read
-  their own job's attachments," which would be the natural next tightening.
+  `<img>`/download links work directly) and read/write through the authenticated
+  storage API is now scoped the same way as the rest of the app — admin/manager see
+  everything, a technician only their own assigned orders' files (via the `${order_id}/…`
+  path prefix each upload uses). That said, Supabase serves public-bucket objects
+  through `/object/public/…` (what `getPublicUrl` returns) **without evaluating RLS at
+  all**, so anyone with a leaked or guessed object URL can still fetch it — the RLS
+  scoping only tightens the authenticated API surface, not the public URL itself.
+  Closing that fully would mean a private bucket + signed URLs everywhere the app calls
+  `getPublicUrl`, which wasn't done here.
 - **AI Document Understanding** only accepts image files (JPG/PNG/etc.), not PDF —
   Tesseract.js OCRs images directly; a PDF would need to be rendered to an image first,
   which wasn't built. Accuracy also depends entirely on photo quality/lighting/handwriting
@@ -263,18 +272,23 @@ a large phone-camera photo with only a generic spinner.
   this feature (unlike the rest of the app) needs outbound internet access beyond just
   Supabase/DeepSeek to work.
 - No automated tests.
-- **Notifications insert policy trusts the client**, same model as `audit_log`: any
-  signed-in user can insert a `notifications` row for *any* `user_id`, not just their
-  own — the app decides who gets notified, Postgres doesn't verify the sender is allowed
-  to notify that specific recipient. Acceptable for a small internal tool where every
-  client is the same trusted app, not a public multi-tenant API.
+- **Notifications insert policy is scoped by order, not by exact recipient.** A
+  signed-in user can insert a `notifications` row for any `user_id` as long as they
+  themselves have visibility into the referenced `order_id` (admin/manager, or the
+  technician assigned to it) — the same rule as `orders select`. This stops a user from
+  notifying an arbitrary recipient about an order they have no access to, but within an
+  order they're allowed to see, Postgres still doesn't verify the recipient is the
+  "correct" one (e.g. a technician could in principle address a notification to another
+  technician instead of a manager) — the app's own call sites (`src/lib/notifications.ts`)
+  are what actually constrain that, same trust model as `audit_log`.
 - Notifications are in-app only — no push, email, or SMS delivery, and nothing is sent
   if the recipient's browser tab isn't open (no service worker). The bell only reflects
   what's already in the `notifications` table when the page loads, plus whatever arrives
   over the live Realtime subscription afterward.
 - An existing project must **re-run `supabase/schema.sql`** to pick up the
-  `notifications` table, its RLS policies, and the "read admin profiles" policy — it's
-  additive and idempotent (safe to run again in full), but it doesn't run itself.
+  `notifications` table, its RLS policies, the "read admin profiles" policy, and the
+  tightened `notifications insert` / `job-attachments` storage policies described above
+  — it's additive and idempotent (safe to run again in full), but it doesn't run itself.
 
 ## Local Setup
 

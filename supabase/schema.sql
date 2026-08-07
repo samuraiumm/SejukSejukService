@@ -173,11 +173,24 @@ create policy "notifications select" on notifications for select
 
 -- Insert is deliberately NOT "only insert your own row" — the entire point is
 -- one user notifying a different one (e.g. a technician notifying every
--- manager on job completion). Same trust model already used for audit_log:
--- any signed-in user can write, and the app controls what's actually written.
+-- manager on job completion). But it's scoped to the order the notification
+-- is about: the sender must themselves have visibility into that order
+-- (admin/manager, or the technician assigned to it) — same rule as the
+-- `orders select` policy. Every current call site (src/lib/notifications.ts)
+-- always passes an order_id, so this doesn't restrict any real usage; it
+-- just stops a signed-in user from spamming an arbitrary user_id with a
+-- notification tied to an order they have no business referencing.
 drop policy if exists "notifications insert" on notifications;
 create policy "notifications insert" on notifications for insert
-  with check (auth.uid() is not null);
+  with check (
+    auth.uid() is not null
+    and order_id is not null
+    and exists (
+      select 1 from orders o
+      where o.id = notifications.order_id
+        and (auth_role() in ('admin', 'manager') or o.assigned_technician_id = auth_technician_id())
+    )
+  );
 
 drop policy if exists "notifications update" on notifications;
 create policy "notifications update" on notifications for update
@@ -401,17 +414,45 @@ insert into storage.buckets (id, name, public)
 values ('job-attachments', 'job-attachments', true)
 on conflict (id) do nothing;
 
--- Bucket is still marked "public" (simplest for the <img>/<a> links the app
--- renders), but read/write through the API now requires a real signed-in
--- session rather than being open to anonymous requests.
+-- Every upload is written to `${order_id}/...` (see JobComplete.tsx), so
+-- `(storage.foldername(name))[1]` is the order id — the same ownership rule
+-- as `completion_attachments`/`service_completions` can be applied here:
+-- admin/manager see everything, a technician only their own assigned
+-- orders' files. This is real hardening for the authenticated storage API
+-- (e.g. listing objects, or an authenticated download), but note the bucket
+-- itself is still `public = true` below, and Supabase serves public-bucket
+-- objects via the `/object/public/...` URL (what `getPublicUrl` returns)
+-- WITHOUT evaluating these RLS policies at all — so anyone with a leaked/
+-- guessed object URL can still fetch it regardless of this policy. Closing
+-- that fully would mean a private bucket + signed URLs everywhere the app
+-- currently uses `getPublicUrl` (JobComplete, OrderDetail, ReviewQueue,
+-- technician History) — a larger change, not done here.
 drop policy if exists "public read job-attachments" on storage.objects;
 drop policy if exists "auth read job-attachments" on storage.objects;
 create policy "auth read job-attachments"
   on storage.objects for select
-  using (bucket_id = 'job-attachments' and auth.uid() is not null);
+  using (
+    bucket_id = 'job-attachments'
+    and auth.uid() is not null
+    and (
+      auth_role() in ('admin', 'manager')
+      or exists (
+        select 1 from orders o
+        where o.id::text = (storage.foldername(name))[1]
+          and o.assigned_technician_id = auth_technician_id()
+      )
+    )
+  );
 
 drop policy if exists "public upload job-attachments" on storage.objects;
 drop policy if exists "auth upload job-attachments" on storage.objects;
 create policy "auth upload job-attachments"
   on storage.objects for insert
-  with check (bucket_id = 'job-attachments' and auth.uid() is not null);
+  with check (
+    bucket_id = 'job-attachments'
+    and exists (
+      select 1 from orders o
+      where o.id::text = (storage.foldername(name))[1]
+        and o.assigned_technician_id = auth_technician_id()
+    )
+  );

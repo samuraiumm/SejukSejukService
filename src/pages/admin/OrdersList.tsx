@@ -21,6 +21,10 @@ import { supabase } from '../../lib/supabaseClient'
 import type { Order, OrderStatus, Technician } from '../../types'
 import { STATUS_ORDER } from '../../lib/orderStatus'
 import { generatePages } from '../../lib/pagination'
+import { useAuth } from '../../context/AuthContext'
+import { logAction } from '../../lib/audit'
+import { notifyTechnician } from '../../lib/notifications'
+import { getErrorMessage } from '../../lib/errors'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { Card } from '../../components/ui/card'
@@ -121,6 +125,7 @@ function exportCSV(orders: Order[], technicians: Technician[]) {
 
 export default function OrdersList() {
   const navigate = useNavigate()
+  const { session } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
@@ -136,6 +141,10 @@ export default function OrdersList() {
 
   const [summary, setSummary] = useState<Record<string, number>>({})
   const [exporting, setExporting] = useState(false)
+
+  const [bulkTechnicianId, setBulkTechnicianId] = useState('')
+  const [bulkAssigning, setBulkAssigning] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
 
   const debouncedSearch = useDebounce(search, 300)
   const abortRef = useRef<AbortController | null>(null)
@@ -239,6 +248,57 @@ export default function OrdersList() {
       exportCSV((data as unknown as Order[]) ?? [], technicians)
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function handleBulkAssign() {
+    if (!session || !bulkTechnicianId || selectedIds.size === 0) return
+    setBulkAssigning(true)
+    setBulkError(null)
+    try {
+      const technician = technicians.find((t) => t.id === bulkTechnicianId)
+      const targets = orders.filter((o) => selectedIds.has(o.id))
+      const failed: string[] = []
+
+      for (const order of targets) {
+        const statusBump = order.status === 'New' && !order.assigned_technician_id
+        const { error } = await supabase
+          .from('orders')
+          .update({
+            assigned_technician_id: bulkTechnicianId,
+            ...(statusBump ? { status: 'Assigned' } : {}),
+          })
+          .eq('id', order.id)
+
+        if (error) {
+          failed.push(order.order_no)
+          continue
+        }
+
+        await logAction({
+          orderId: order.id,
+          action: `Order assigned to ${technician?.name ?? 'technician'} (bulk)`,
+          actorRole: 'admin',
+          actorName: session.name,
+        })
+        await notifyTechnician(bulkTechnicianId, {
+          title: 'Job assigned to you',
+          body: `${order.order_no} — ${order.service_type} for ${order.customer_name}`,
+          orderId: order.id,
+          link: '/technician/jobs',
+        })
+      }
+
+      if (failed.length > 0) {
+        setBulkError(`Failed to assign: ${failed.join(', ')}`)
+      } else {
+        setBulkTechnicianId('')
+      }
+      await load()
+    } catch (err) {
+      setBulkError(getErrorMessage(err, 'Bulk assignment failed'))
+    } finally {
+      setBulkAssigning(false)
     }
   }
 
@@ -415,6 +475,44 @@ export default function OrdersList() {
           </div>
         </div>
 
+        {selectedIds.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 bg-primary/5 px-4 py-2.5">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedIds.size} selected
+            </span>
+            <Select value={bulkTechnicianId} onValueChange={setBulkTechnicianId}>
+              <SelectTrigger className="h-8 w-[180px] text-sm border-gray-200 bg-white">
+                <SelectValue placeholder="Assign technician…" />
+              </SelectTrigger>
+              <SelectContent>
+                {technicians.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              className="h-8"
+              disabled={!bulkTechnicianId || bulkAssigning}
+              onClick={() => void handleBulkAssign()}
+            >
+              {bulkAssigning ? 'Assigning…' : 'Assign'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 border-gray-200"
+              disabled={bulkAssigning}
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear
+            </Button>
+            {bulkError && <span className="text-sm text-red-600">{bulkError}</span>}
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           {loading ? (
             <div className="p-4 space-y-3">
@@ -478,15 +576,14 @@ export default function OrdersList() {
                     sortDir={sortDir}
                     onSort={handleSort}
                   />
-                  <th className="hidden md:table-cell px-4 py-3">
-                    <SortHeader
-                      field="created_at"
-                      label="Created"
-                      sortField={sortField}
-                      sortDir={sortDir}
-                      onSort={handleSort}
-                    />
-                  </th>
+                  <SortHeader
+                    field="created_at"
+                    label="Created"
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    className="hidden md:table-cell"
+                  />
                 </tr>
               </thead>
               <tbody>
@@ -611,17 +708,19 @@ function SortHeader({
   sortField,
   sortDir,
   onSort,
+  className = '',
 }: {
   field: SortField
   label: string
   sortField: SortField
   sortDir: SortDir
   onSort: (field: SortField) => void
+  className?: string
 }) {
   const active = sortField === field
   return (
     <th
-      className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100/70 transition-colors whitespace-nowrap"
+      className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100/70 transition-colors whitespace-nowrap ${className}`}
       onClick={() => onSort(field)}
     >
       <div className="flex items-center gap-1.5">

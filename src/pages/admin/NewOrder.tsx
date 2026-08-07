@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, CheckCircle2, FileScan, Loader2, ScanText, Sparkles } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Loader2, ScanText, Sparkles, Upload } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
 import { notifyTechnician } from '../../lib/notifications'
@@ -11,7 +11,7 @@ import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
 import { SERVICE_TYPES, type Technician } from '../../types'
 import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
@@ -34,6 +34,10 @@ interface ExtractedDocumentFields {
 }
 
 const MAX_DOCUMENT_MB = 8
+
+/** Light filled-field look, applied locally on this page only (not the shared Input/Textarea/Select style). */
+const fieldClass =
+  'rounded-lg border-0 bg-gray-50 shadow-none focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-teal-500/40'
 
 const emptyForm = {
   customer_name: '',
@@ -58,6 +62,7 @@ export default function NewOrder() {
   const [autoFilledFrom, setAutoFilledFrom] = useState<ExtractedDocumentFields | null>(null)
   const [ocrText, setOcrText] = useState<string | null>(null)
   const [showOcrText, setShowOcrText] = useState(false)
+  const [documentFileName, setDocumentFileName] = useState<string | null>(null)
   const [serviceTypeUnmatched, setServiceTypeUnmatched] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const previewUrlRef = useRef<string | null>(null)
@@ -69,6 +74,8 @@ export default function NewOrder() {
     address: string
     serviceType: string
   } | null>(null)
+
+  const isDirty = JSON.stringify(form) !== JSON.stringify(emptyForm)
 
   useEffect(() => {
     supabase
@@ -83,12 +90,26 @@ export default function NewOrder() {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
+  function resetForm() {
+    setForm(emptyForm)
+    setError(null)
+    setAutoFilledFrom(null)
+    setOcrText(null)
+    setShowOcrText(false)
+    setServiceTypeUnmatched(false)
+    setDocumentFileName(null)
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
+    previewUrlRef.current = null
+    setPreviewUrl(null)
+  }
+
   async function handleDocumentUpload(file: File) {
     setExtractError(null)
     setAutoFilledFrom(null)
     setOcrText(null)
     setShowOcrText(false)
     setServiceTypeUnmatched(false)
+    setDocumentFileName(file.name)
 
     if (file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
       setExtractError(
@@ -207,14 +228,7 @@ export default function NewOrder() {
         address: form.address,
         serviceType: form.service_type,
       })
-      setForm(emptyForm)
-      setAutoFilledFrom(null)
-      setOcrText(null)
-      setShowOcrText(false)
-      setServiceTypeUnmatched(false)
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-      previewUrlRef.current = null
-      setPreviewUrl(null)
+      resetForm()
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to create order'))
     } finally {
@@ -224,7 +238,7 @@ export default function NewOrder() {
 
   if (summary) {
     return (
-      <Card className="mx-auto max-w-lg border-emerald-200 bg-emerald-50">
+      <Card className="mx-auto max-w-lg rounded-xl border-emerald-200 bg-emerald-50 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-emerald-900">
             <CheckCircle2 className="size-5" />
@@ -287,183 +301,252 @@ export default function NewOrder() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileScan className="size-4" />
-            Auto-fill from a document (AI)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Upload a photo of a service request, quote, or invoice — AI will read it and
-            pre-fill the fields below. Always review before submitting.
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Create Order</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Fill in the details to create a new service order for a customer.
           </p>
-          <Input
-            type="file"
-            accept="image/*"
-            disabled={extractStage !== null}
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) void handleDocumentUpload(file)
-              e.target.value = ''
-            }}
-          />
+        </div>
+        <div className="flex items-center gap-3">
+          {isDirty && (
+            <span className="flex items-center gap-1.5 text-sm text-amber-600">
+              <span className="size-1.5 rounded-full bg-amber-500" />
+              Unsaved changes
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={resetForm}
+            disabled={!isDirty || submitting}
+            className="border-gray-200 text-gray-600"
+          >
+            Discard
+          </Button>
+          <Button
+            type="submit"
+            form="new-order-form"
+            disabled={submitting}
+            className="bg-teal-600 text-white hover:bg-teal-700"
+          >
+            {submitting ? 'Creating…' : 'Create Order'}
+          </Button>
+        </div>
+      </div>
 
-          {(extractStage || previewUrl) && (
-            <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
-              {previewUrl && (
-                <div className="relative size-20 shrink-0 overflow-hidden rounded-md border bg-background">
-                  <img src={previewUrl} alt="Uploaded document" className="size-full object-cover" />
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Couldn't create order</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <form id="new-order-form" onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-5 lg:col-span-2">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">
+                Auto-fill from a document (AI)
+              </CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Upload a photo of a service request, quote, or invoice — AI will read it and
+                pre-fill the fields below. Always review before submitting.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <DocumentDropZone
+                disabled={extractStage !== null}
+                fileName={documentFileName}
+                onFile={(file) => void handleDocumentUpload(file)}
+              />
+
+              {(extractStage || previewUrl) && (
+                <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-3">
+                  {previewUrl && (
+                    <div className="relative size-20 shrink-0 overflow-hidden rounded-md border bg-background">
+                      <img src={previewUrl} alt="Uploaded document" className="size-full object-cover" />
+                      {extractStage && (
+                        <>
+                          <div className="absolute inset-0 bg-teal-500/10" />
+                          <div className="absolute inset-x-0 h-0.5 animate-scan-line bg-teal-500 shadow-[0_0_8px_2px_rgba(20,184,166,0.6)]" />
+                        </>
+                      )}
+                    </div>
+                  )}
                   {extractStage && (
-                    <>
-                      <div className="absolute inset-0 bg-primary/10" />
-                      <div className="absolute inset-x-0 h-0.5 animate-scan-line bg-primary shadow-[0_0_8px_2px_var(--primary)]" />
-                    </>
+                    <div className="flex flex-1 flex-col gap-1.5 pt-1 text-sm">
+                      <StepRow
+                        active={extractStage === 'ocr'}
+                        done={extractStage === 'ai'}
+                        icon={ScanText}
+                        label="Reading document (OCR)"
+                      />
+                      <StepRow
+                        active={extractStage === 'ai'}
+                        done={false}
+                        icon={Sparkles}
+                        label="Extracting fields with AI"
+                      />
+                    </div>
                   )}
                 </div>
               )}
-              {extractStage && (
-                <div className="flex flex-1 flex-col gap-1.5 pt-1 text-sm">
-                  <StepRow
-                    active={extractStage === 'ocr'}
-                    done={extractStage === 'ai'}
-                    icon={ScanText}
-                    label="Reading document (OCR)"
-                  />
-                  <StepRow
-                    active={extractStage === 'ai'}
-                    done={false}
-                    icon={Sparkles}
-                    label="Extracting fields with AI"
-                  />
+
+              {extractError && (
+                <Alert variant="destructive">
+                  <AlertTriangle />
+                  <AlertTitle>Couldn't extract this document</AlertTitle>
+                  <AlertDescription>{extractError}</AlertDescription>
+                </Alert>
+              )}
+              {autoFilledFrom && !extractStage && (
+                <Alert variant="success">
+                  <Sparkles />
+                  <AlertTitle>Fields pre-filled from the document</AlertTitle>
+                  <AlertDescription>Please verify everything below before submitting.</AlertDescription>
+                </Alert>
+              )}
+              {serviceTypeUnmatched && !extractStage && (
+                <Alert variant="warning">
+                  <AlertTriangle />
+                  <AlertTitle>Service type couldn't be matched</AlertTitle>
+                  <AlertDescription>
+                    The document mentioned &ldquo;{autoFilledFrom?.service_type}&rdquo;, which doesn't
+                    match any of the options below — please select it manually.
+                  </AlertDescription>
+                </Alert>
+              )}
+              {ocrText && !extractStage && (
+                <div className="text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrText((v) => !v)}
+                    className="text-muted-foreground underline-offset-2 hover:underline"
+                  >
+                    {showOcrText ? 'Hide' : 'Show'} raw text read from the document
+                  </button>
+                  {showOcrText && (
+                    <pre className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 text-xs whitespace-pre-wrap">
+                      {ocrText}
+                    </pre>
+                  )}
                 </div>
               )}
-            </div>
-          )}
+            </CardContent>
+          </Card>
 
-          {extractError && (
-            <Alert variant="destructive">
-              <AlertTriangle />
-              <AlertTitle>Couldn't extract this document</AlertTitle>
-              <AlertDescription>{extractError}</AlertDescription>
-            </Alert>
-          )}
-          {autoFilledFrom && !extractStage && (
-            <Alert variant="success">
-              <Sparkles />
-              <AlertTitle>Fields pre-filled from the document</AlertTitle>
-              <AlertDescription>Please verify everything below before submitting.</AlertDescription>
-            </Alert>
-          )}
-          {serviceTypeUnmatched && !extractStage && (
-            <Alert variant="warning">
-              <AlertTriangle />
-              <AlertTitle>Service type couldn't be matched</AlertTitle>
-              <AlertDescription>
-                The document mentioned &ldquo;{autoFilledFrom?.service_type}&rdquo;, which doesn't
-                match any of the options below — please select it manually.
-              </AlertDescription>
-            </Alert>
-          )}
-          {ocrText && !extractStage && (
-            <div className="text-sm">
-              <button
-                type="button"
-                onClick={() => setShowOcrText((v) => !v)}
-                className="text-muted-foreground underline-offset-2 hover:underline"
-              >
-                {showOcrText ? 'Hide' : 'Show'} raw text read from the document
-              </button>
-              {showOcrText && (
-                <pre className="mt-2 max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 text-xs whitespace-pre-wrap">
-                  {ocrText}
-                </pre>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Customer Name" required>
-                <Input
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">
+                Customer Information
+              </CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Who this order is for.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Customer Name" required>
+                  <Input
+                    required
+                    className={fieldClass}
+                    value={form.customer_name}
+                    onChange={(e) => update('customer_name', e.target.value)}
+                  />
+                </Field>
+                <Field label="Phone" required>
+                  <Input
+                    required
+                    type="tel"
+                    placeholder="e.g. 0123456789"
+                    className={fieldClass}
+                    value={form.phone}
+                    onChange={(e) => update('phone', e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field label="Address" required>
+                <Textarea
                   required
-                  value={form.customer_name}
-                  onChange={(e) => update('customer_name', e.target.value)}
+                  rows={2}
+                  className={fieldClass}
+                  value={form.address}
+                  onChange={(e) => update('address', e.target.value)}
                 />
               </Field>
-              <Field label="Phone" required>
-                <Input
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">Job Details</CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                What needs to be done, and the price quoted to the customer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Field label="Problem Description" required>
+                <Textarea
                   required
-                  type="tel"
-                  placeholder="e.g. 0123456789"
-                  value={form.phone}
-                  onChange={(e) => update('phone', e.target.value)}
+                  rows={3}
+                  className={fieldClass}
+                  value={form.problem_description}
+                  onChange={(e) => update('problem_description', e.target.value)}
                 />
               </Field>
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Service Type" required>
+                  <Select
+                    value={form.service_type}
+                    onValueChange={(value) => update('service_type', value)}
+                  >
+                    <SelectTrigger className={`w-full ${fieldClass}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Quoted Price (RM)" required>
+                  <Input
+                    required
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={fieldClass}
+                    value={form.quoted_price}
+                    onChange={(e) => update('quoted_price', e.target.value)}
+                  />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <Field label="Address" required>
-              <Textarea
-                required
-                rows={2}
-                value={form.address}
-                onChange={(e) => update('address', e.target.value)}
-              />
-            </Field>
-
-            <Field label="Problem Description" required>
-              <Textarea
-                required
-                rows={3}
-                value={form.problem_description}
-                onChange={(e) => update('problem_description', e.target.value)}
-              />
-            </Field>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Service Type" required>
-                <Select
-                  value={form.service_type}
-                  onValueChange={(value) => update('service_type', value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Quoted Price (RM)" required>
-                <Input
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.quoted_price}
-                  onChange={(e) => update('quoted_price', e.target.value)}
-                />
-              </Field>
-            </div>
-
-            <Field label="Assigned Technician">
+        <div className="space-y-5">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">Assignment</CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Assign a technician now, or leave unassigned to assign later.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <Select
                 value={form.assigned_technician_id || 'unassigned'}
                 onValueChange={(value) =>
                   update('assigned_technician_id', value === 'unassigned' ? '' : value)
                 }
               >
-                <SelectTrigger className="w-full">
+                <SelectTrigger className={`w-full ${fieldClass}`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -475,24 +558,90 @@ export default function NewOrder() {
                   ))}
                 </SelectContent>
               </Select>
-            </Field>
+            </CardContent>
+          </Card>
 
-            <Field label="Admin Notes">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">Notes</CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Internal notes for your team — not shared with the customer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <Textarea
-                rows={2}
+                rows={5}
+                placeholder="Type…"
+                className={fieldClass}
                 value={form.admin_notes}
                 onChange={(e) => update('admin_notes', e.target.value)}
               />
-            </Field>
+            </CardContent>
+          </Card>
+        </div>
+      </form>
+    </div>
+  )
+}
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+function DocumentDropZone({
+  disabled,
+  fileName,
+  onFile,
+}: {
+  disabled: boolean
+  fileName: string | null
+  onFile: (file: File) => void
+}) {
+  const [isDragging, setIsDragging] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-            <Button type="submit" disabled={submitting} className="w-full">
-              {submitting ? 'Creating order…' : 'Create Order'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+  return (
+    <div
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      onClick={() => !disabled && inputRef.current?.click()}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) inputRef.current?.click()
+      }}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!disabled) setIsDragging(true)
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setIsDragging(false)
+        const file = e.dataTransfer.files?.[0]
+        if (!disabled && file) onFile(file)
+      }}
+      className={`flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${
+        disabled
+          ? 'cursor-not-allowed opacity-60'
+          : isDragging
+            ? 'cursor-pointer border-teal-400 bg-teal-50/60'
+            : 'cursor-pointer border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50'
+      }`}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        disabled={disabled}
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) onFile(file)
+          e.target.value = ''
+        }}
+      />
+      <span className="flex size-10 items-center justify-center rounded-full bg-teal-50 text-teal-600">
+        <Upload className="size-5" />
+      </span>
+      <p className="text-sm font-medium text-gray-700">
+        {fileName ?? 'Click to upload or drag and drop'}
+      </p>
+      <p className="text-xs text-gray-400">PNG or JPG, up to {MAX_DOCUMENT_MB}MB</p>
     </div>
   )
 }
@@ -508,7 +657,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>
+      <Label className="text-gray-700">
         {label} {required && <span className="text-destructive">*</span>}
       </Label>
       {children}
