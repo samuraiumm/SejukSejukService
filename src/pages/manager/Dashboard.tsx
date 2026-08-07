@@ -23,6 +23,8 @@ import {
   Users,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { getGreeting } from '../../lib/greeting'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Button } from '../../components/ui/button'
@@ -84,6 +86,8 @@ type ReviewOrder = Order & {
 }
 
 export default function Dashboard() {
+  const { session } = useAuth()
+  const greeting = useMemo(() => getGreeting(), [])
   const [completions, setCompletions] = useState<ServiceCompletion[]>([])
   const [rescheduleCounts, setRescheduleCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
@@ -198,6 +202,36 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
+      <Card className="overflow-hidden border-0 bg-gradient-to-r from-primary/5 via-accent/50 to-transparent shadow-sm">
+        <CardContent className="flex items-center justify-between p-5">
+          <div>
+            <p className="text-lg font-semibold">
+              {greeting.emoji} {greeting.text}, <span className="capitalize">{session?.name ?? 'Manager'}</span>
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {new Date().toLocaleDateString('en-MY', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+              {' — '}
+              {greeting.message}
+            </p>
+          </div>
+          <div className="hidden gap-6 text-right sm:flex">
+            <div>
+              <p className="text-2xl font-bold">{pendingReview}</p>
+              <p className="text-xs text-muted-foreground">awaiting review</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{flaggedCount}</p>
+              <p className="text-xs text-muted-foreground">flagged</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center justify-between">
         <div />
         <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">

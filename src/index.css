@@ -6,7 +6,7 @@
 :root {
   --radius: 0.625rem;
 
-  --background: #f8fafc;
+  --background: #f2f8f7;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
@@ -15,9 +15,9 @@
 
   --primary: #0873ae;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
+  --secondary: #eef5f4;
   --secondary-foreground: #0f172a;
-  --muted: #f1f5f9;
+  --muted: #eef5f4;
   --muted-foreground: #64748b;
   --accent: #eff9ff;
   --accent-foreground: #075c8c;
@@ -34,14 +34,14 @@
   --chart-4: #8b5cf6;
   --chart-5: #ef4444;
 
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f172a;
-  --sidebar-primary: #0873ae;
+  --sidebar: #0a3d3d;
+  --sidebar-foreground: #e3f7f4;
+  --sidebar-primary: #14b8a6;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eff9ff;
-  --sidebar-accent-foreground: #075c8c;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #0e8fd9;
+  --sidebar-accent: #0f4f4a;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #0f4f4a;
+  --sidebar-ring: #14b8a6;
 }
 
 @theme inline {

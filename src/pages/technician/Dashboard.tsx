@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../../context/AuthContext'
+import { getGreeting } from '../../lib/greeting'
 import type { Order, ServiceCompletion } from '../../types'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
@@ -116,13 +117,6 @@ function formatElapsed(seconds: number): string {
   if (h > 0) return `${h}h ${m}m`
   if (m > 0) return `${m}m`
   return `${s}s`
-}
-
-function getGreeting(): { text: string; emoji: string; message: string } {
-  const hour = new Date().getHours()
-  if (hour < 12) return { text: 'Good morning', emoji: '☀️', message: "Let's have a productive day!" }
-  if (hour < 17) return { text: 'Good afternoon', emoji: '🌤', message: 'Hope your day is going well.' }
-  return { text: 'Good evening', emoji: '🌙', message: 'Almost time to wrap up.' }
 }
 
 function ProgressRing({ value, max, size = 72 }: { value: number; max: number; size?: number }) {

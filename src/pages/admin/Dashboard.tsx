@@ -18,6 +18,8 @@ import {
 import { Briefcase, CheckCircle2, Clock, DollarSign, RefreshCw, Users } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabaseClient'
+import { useAuth } from '../../context/AuthContext'
+import { getGreeting } from '../../lib/greeting'
 import type { Order, ServiceCompletion, Technician } from '../../types'
 import { STATUS_ORDER } from '../../lib/orderStatus'
 import StatusBadge from '../../components/StatusBadge'
@@ -68,6 +70,8 @@ const STACK_SEGMENTS = [
 ] as const
 
 export default function Dashboard() {
+  const { session } = useAuth()
+  const greeting = useMemo(() => getGreeting(), [])
   const [range, setRange] = useState<Range>('7')
   const [orders, setOrders] = useState<Order[]>([])
   const [completions, setCompletions] = useState<ServiceCompletion[]>([])
@@ -202,6 +206,36 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
+      <Card className="overflow-hidden border-0 bg-gradient-to-r from-primary/5 via-accent/50 to-transparent shadow-sm">
+        <CardContent className="flex items-center justify-between p-5">
+          <div>
+            <p className="text-lg font-semibold">
+              {greeting.emoji} {greeting.text}, <span className="capitalize">{session?.name ?? 'Admin'}</span>
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {new Date().toLocaleDateString('en-MY', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+              {' — '}
+              {greeting.message}
+            </p>
+          </div>
+          <div className="hidden gap-6 text-right sm:flex">
+            <div>
+              <p className="text-2xl font-bold">{stats.pendingJobs}</p>
+              <p className="text-xs text-muted-foreground">pending jobs</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{stats.awaitingReview}</p>
+              <p className="text-xs text-muted-foreground">awaiting review</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="flex items-center gap-2">
         <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
             {(['7', '30', 'all'] as Range[]).map((r) => (

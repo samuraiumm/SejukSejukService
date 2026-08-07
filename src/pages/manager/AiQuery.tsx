@@ -1,9 +1,9 @@
-import { useState, type FormEvent } from 'react'
-import { Bot, Send } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ArrowUp, Bot, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
-import { Card, CardContent } from '../../components/ui/card'
+import { cn } from '../../lib/utils'
 
 interface ChatEntry {
   question: string
@@ -17,16 +17,40 @@ const EXAMPLES = [
   'Which technician might be overloaded this week?',
 ]
 
+function ThinkingBubble() {
+  return (
+    <div className="flex items-center gap-1 py-1">
+      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.3s]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.15s]" />
+      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
+    </div>
+  )
+}
+
+function Avatar() {
+  return (
+    <div className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+      <Bot className="size-4" />
+    </div>
+  )
+}
+
 export default function AiQuery() {
   const [question, setQuestion] = useState('')
   const [history, setHistory] = useState<ChatEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [history, loading])
 
   async function ask(q: string) {
-    if (!q.trim()) return
+    if (!q.trim() || loading) return
     setError(null)
     setLoading(true)
+    setQuestion('')
     try {
       const {
         data: { session },
@@ -42,7 +66,6 @@ export default function AiQuery() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Request failed')
       setHistory((h) => [...h, { question: q, answer: data.answer }])
-      setQuestion('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reach AI assistant')
     } finally {
@@ -55,62 +78,93 @@ export default function AiQuery() {
     void ask(question)
   }
 
+  const composer = (
+    <form
+      onSubmit={handleSubmit}
+      className="flex items-center gap-1.5 rounded-full border bg-card py-1.5 pr-1.5 pl-4 shadow-sm"
+    >
+      <Input
+        value={question}
+        onChange={(e) => setQuestion(e.target.value)}
+        placeholder="Ask about jobs, technicians, or completions…"
+        className="h-auto border-0 bg-transparent px-0 py-1 shadow-none focus-visible:ring-0"
+      />
+      <Button
+        type="submit"
+        size="icon-sm"
+        className="shrink-0 rounded-full"
+        disabled={loading || !question.trim()}
+      >
+        <ArrowUp />
+      </Button>
+    </form>
+  )
+
+  if (history.length === 0) {
+    return (
+      <div className="flex min-h-[65vh] flex-col items-center justify-center px-4">
+        <div className="w-full max-w-2xl space-y-6">
+          <div className="text-center">
+            <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Sparkles className="size-5" />
+            </div>
+            <h1 className="text-xl font-semibold">Ask about your operations</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Jobs, technicians, and completions — ask in plain English.
+            </p>
+          </div>
+
+          {composer}
+
+          <div className="flex flex-wrap justify-center gap-2">
+            {EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => void ask(ex)}
+                className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+
+          {error && <p className="text-center text-sm text-destructive">{error}</p>}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {EXAMPLES.map((ex) => (
-          <Button key={ex} variant="outline" size="sm" onClick={() => void ask(ex)}>
-            {ex}
-          </Button>
+    <div className="mx-auto flex max-w-3xl flex-col">
+      <div className="space-y-6 pb-4">
+        {history.map((entry, i) => (
+          <div key={i} className="space-y-4">
+            <div className="flex justify-end">
+              <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+                {entry.question}
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Avatar />
+              <p className="flex-1 pt-1 text-sm leading-relaxed whitespace-pre-line">{entry.answer}</p>
+            </div>
+          </div>
         ))}
+
+        {loading && (
+          <div className="flex gap-3">
+            <Avatar />
+            <ThinkingBubble />
+          </div>
+        )}
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <div ref={bottomRef} />
       </div>
 
-      <Card>
-        <CardContent className="space-y-4">
-          {history.length === 0 ? (
-            <p className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Bot className="size-4" />
-              Ask a question or tap an example above.
-            </p>
-          ) : (
-            history.map((entry, i) => (
-              <div key={i} className="space-y-2">
-                <div className="ml-auto max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-2 text-sm text-primary-foreground">
-                  {entry.question}
-                </div>
-                <div className="flex max-w-[85%] items-start gap-2">
-                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
-                    <Bot className="size-3.5" />
-                  </div>
-                  <div className="whitespace-pre-line rounded-2xl rounded-bl-sm bg-muted px-4 py-2 text-sm">
-                    {entry.answer}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="Ask about jobs, technicians, or completions…"
-        />
-        <Button type="submit" disabled={loading}>
-          {loading ? (
-            'Asking…'
-          ) : (
-            <>
-              <Send />
-              Ask
-            </>
-          )}
-        </Button>
-      </form>
+      <div className={cn('sticky bottom-4 z-10')}>{composer}</div>
     </div>
   )
 }

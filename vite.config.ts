@@ -123,5 +123,10 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
       },
     },
+    server: {
+      // Bind to all network interfaces (not just localhost) so the dev
+      // server is reachable from a phone or other device on the same Wi-Fi.
+      host: true,
+    },
   }
 })
