@@ -19,7 +19,6 @@ import {
   Clock,
   DollarSign,
   RefreshCw,
-  Sparkles,
   TrendingDown,
   TrendingUp,
 } from 'lucide-react'
@@ -119,7 +118,17 @@ function formatElapsed(seconds: number): string {
   return `${s}s`
 }
 
-function ProgressRing({ value, max, size = 72 }: { value: number; max: number; size?: number }) {
+function ProgressRing({
+  value,
+  max,
+  size = 72,
+  labelClassName = 'text-sm',
+}: {
+  value: number
+  max: number
+  size?: number
+  labelClassName?: string
+}) {
   const radius = (size - 8) / 2
   const circumference = 2 * Math.PI * radius
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
@@ -141,7 +150,7 @@ function ProgressRing({ value, max, size = 72 }: { value: number; max: number; s
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="var(--color-chart-1)"
+          stroke="var(--sidebar-primary)"
           strokeWidth="6"
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -149,7 +158,9 @@ function ProgressRing({ value, max, size = 72 }: { value: number; max: number; s
           className="transition-[stroke-dashoffset] duration-700 ease-out"
         />
       </svg>
-      <span className="absolute text-sm font-bold">{Math.round(pct)}%</span>
+      <span className={`absolute font-bold ${labelClassName} ${max > 0 ? '' : 'text-muted-foreground'}`}>
+        {max > 0 ? `${Math.round(pct)}%` : '—'}
+      </span>
     </div>
   )
 }
@@ -351,28 +362,55 @@ export default function TechnicianDashboard() {
   return (
     <div className="space-y-4">
       {/* Greeting banner */}
-      <Card className="overflow-hidden border-0 bg-gradient-to-r from-primary/5 via-accent/50 to-transparent shadow-sm">
-        <CardContent className="flex items-center justify-between p-5">
-          <div>
-            <p className="text-lg font-semibold">
-              {greeting.emoji} {greeting.text}, <span className="capitalize">{session?.name ?? 'Technician'}</span>
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {new Date().toLocaleDateString('en-MY', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-              {' — '}
-              {greeting.message}
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              <Sparkles className="inline size-3" /> All-time: {allTimeStats.total} jobs completed, RM{' '}
-              {allTimeStats.revenue.toFixed(2)} earned
-            </p>
+      <Card className="relative overflow-hidden border border-sidebar-primary/20 bg-gradient-to-br from-sidebar-primary/15 via-sidebar-primary/5 to-white shadow-sm">
+        <div className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-gradient-to-br from-sidebar-primary/25 to-sidebar/10 blur-2xl" />
+        <CardContent className="relative flex flex-col items-center gap-5 p-6 text-center sm:flex-row sm:justify-center sm:gap-8 sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sidebar-primary/30 via-sidebar-primary/15 to-transparent text-2xl">
+              {greeting.emoji}
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-gray-900">
+                {greeting.text},{' '}
+                <span className="capitalize text-sidebar-primary">{session?.name ?? 'Technician'}</span>
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {new Date().toLocaleDateString('en-MY', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}
+                {' — '}
+                {greeting.message}
+              </p>
+            </div>
           </div>
-          <ProgressRing value={weeklyProgress.completed} max={weeklyProgress.total} />
+
+          <div className="hidden h-12 w-px bg-sidebar-primary/20 sm:block" />
+
+          <div className="flex items-center gap-3">
+            <GreetingStat icon={Briefcase} value={allTimeStats.total} label="Jobs Completed (All-Time)" />
+            <GreetingStat
+              icon={DollarSign}
+              value={`RM ${allTimeStats.revenue.toFixed(2)}`}
+              label="Earned (All-Time)"
+            />
+            <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+              <ProgressRing
+                value={weeklyProgress.completed}
+                max={weeklyProgress.total}
+                size={52}
+                labelClassName="text-xs"
+              />
+              <div className="text-left">
+                <p className="text-lg leading-none font-bold text-gray-900">
+                  {weeklyProgress.total > 0 ? `${weeklyProgress.completed}/${weeklyProgress.total}` : 'No jobs yet'}
+                </p>
+                <p className="mt-1 text-[11px] whitespace-nowrap text-muted-foreground">This Week</p>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -400,27 +438,30 @@ export default function TechnicianDashboard() {
       )}
 
       {/* Date range filter */}
-      <div className="flex items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
-          {(['7', '30', 'all'] as Range[]).map((r) => (
-            <Button
-              key={r}
-              size="sm"
-              variant={range === r ? 'default' : 'ghost'}
-              onClick={() => setRange(r)}
-            >
-              {r === 'all' ? 'All' : `Last ${r}d`}
-            </Button>
-          ))}
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+        <p className="text-sm font-medium text-gray-700">Overview</p>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
+            {(['7', '30', 'all'] as Range[]).map((r) => (
+              <Button
+                key={r}
+                size="sm"
+                variant={range === r ? 'default' : 'ghost'}
+                onClick={() => setRange(r)}
+              >
+                {r === 'all' ? 'All' : `Last ${r}d`}
+              </Button>
+            ))}
+          </div>
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </Button>
         </div>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={handleRefresh}
-          disabled={refreshing}
-        >
-          <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
-        </Button>
       </div>
 
       {loading ? (
@@ -446,6 +487,8 @@ export default function TechnicianDashboard() {
               label="Active Jobs"
               value={stats.activeCount.toString()}
               to="/technician/jobs"
+              tone="from-brand-500 to-brand-600"
+              wash="from-brand-500/25 to-transparent"
             />
             <StatCard
               icon={CheckCircle2}
@@ -453,6 +496,8 @@ export default function TechnicianDashboard() {
               value={stats.completedMonth.toString()}
               trend={trendLabel(stats.jobsTrend)}
               to="/technician/history"
+              tone="from-emerald-500 to-emerald-600"
+              wash="from-emerald-500/25 to-transparent"
             />
             <StatCard
               icon={DollarSign}
@@ -468,11 +513,15 @@ export default function TechnicianDashboard() {
                   </span>
                 ) : null
               }
+              tone="from-violet-500 to-violet-600"
+              wash="from-violet-500/25 to-transparent"
             />
             <StatCard
               icon={Clock}
               label="Avg Time Per Job"
               value={stats.avgDurationMin != null ? `${stats.avgDurationMin}m` : '—'}
+              tone="from-amber-500 to-amber-600"
+              wash="from-amber-500/25 to-transparent"
             />
           </div>
 
@@ -636,22 +685,53 @@ export default function TechnicianDashboard() {
   )
 }
 
+function GreetingStat({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: typeof Briefcase
+  value: string | number
+  label: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-sm">
+        <Icon className="size-5 text-white" />
+      </div>
+      <div className="text-left">
+        <p className="text-xl leading-none font-bold text-gray-900">{value}</p>
+        <p className="mt-1 text-xs whitespace-nowrap text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({
   icon: Icon,
   label,
   value,
   trend,
   to,
+  tone = 'from-slate-500 to-slate-600',
+  wash = 'from-slate-500/15 to-transparent',
 }: {
   icon: typeof Briefcase
   label: string
   value: string
   trend?: React.ReactNode
   to?: string
+  tone?: string
+  wash?: string
 }) {
   const content = (
-    <Card className={to ? 'transition-colors hover:bg-accent/50' : ''}>
-      <CardContent className="flex items-center justify-between">
+    <Card
+      className={`relative overflow-hidden border border-gray-200 ${to ? 'transition-colors hover:bg-accent/50' : ''}`}
+    >
+      <div
+        className={`pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-gradient-to-br ${wash} blur-2xl`}
+      />
+      <CardContent className="relative flex items-center justify-between">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {label}
@@ -661,8 +741,10 @@ function StatCard({
             {trend}
           </p>
         </div>
-        <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-          <Icon className="size-5" />
+        <div
+          className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm ${tone}`}
+        >
+          <Icon className="size-5 text-white" />
         </div>
       </CardContent>
     </Card>

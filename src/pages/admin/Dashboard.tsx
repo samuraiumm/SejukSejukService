@@ -49,7 +49,19 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_GRADIENT = {
   id: (name: string) => `grad${name.replace(/\s/g, '')}`,
+  // Deliberately much lighter than STATUS_COLORS (which stays flat/mid-tone
+  // for badges and legend dots) — a mid-tone-to-dark spread is too subtle a
+  // shift to read as a gradient at a glance, especially on narrow bar segments.
   stops: (name: string): [string, string] => {
+    const light: Record<string, string> = {
+      New: '#fcd34d',
+      Assigned: '#93c5fd',
+      'In Progress': '#c4b5fd',
+      'Job Done': '#6ee7b7',
+      Reviewed: '#67e8f9',
+      Closed: '#d1d5db',
+      Cancelled: '#fca5a5',
+    }
     const dark: Record<string, string> = {
       New: '#d97706',
       Assigned: '#2563eb',
@@ -59,7 +71,7 @@ const STATUS_GRADIENT = {
       Closed: '#4b5563',
       Cancelled: '#dc2626',
     }
-    return [STATUS_COLORS[name] ?? '#6b7280', dark[name] ?? '#4b5563']
+    return [light[name] ?? '#e5e7eb', dark[name] ?? '#4b5563']
   },
 }
 
@@ -172,24 +184,38 @@ export default function Dashboard() {
   }, [allOrders, technicians])
 
   const revenueTrend = useMemo(() => {
-    const byMonth = new Map<string, number>()
+    // Day-level granularity for the 7d/30d ranges — grouping by month there
+    // would collapse the whole window into a single point, since a week or
+    // month rarely crosses a calendar-month boundary.
+    const byDay = range !== 'all'
+    const buckets = new Map<string, number>()
     for (const c of completions) {
       const d = new Date(c.completed_at)
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      byMonth.set(key, (byMonth.get(key) ?? 0) + Number(c.final_amount))
+      const key = byDay
+        ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      buckets.set(key, (buckets.get(key) ?? 0) + Number(c.final_amount))
     }
-    const sorted = [...byMonth.entries()]
+    const sorted = [...buckets.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([month, amount]) => {
-        const [y, m] = month.split('-')
+      .map(([key, amount]) => {
+        if (byDay) {
+          const [y, m, day] = key.split('-')
+          const label = new Date(Number(y), Number(m) - 1, Number(day)).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+          })
+          return { month: label, amount }
+        }
+        const [y, m] = key.split('-')
         const label = new Date(Number(y), Number(m) - 1).toLocaleDateString(undefined, {
           month: 'short',
           year: '2-digit',
         })
         return { month: label, amount }
       })
-    return sorted.slice(-12)
-  }, [completions])
+    return sorted.slice(byDay ? -30 : -12)
+  }, [completions, range])
 
   const upcomingSchedule = useMemo(() => {
     const now = new Date()
@@ -206,38 +232,44 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden border-0 bg-gradient-to-r from-primary/5 via-accent/50 to-transparent shadow-sm">
-        <CardContent className="flex items-center justify-between p-5">
-          <div>
-            <p className="text-lg font-semibold">
-              {greeting.emoji} {greeting.text}, <span className="capitalize">{session?.name ?? 'Admin'}</span>
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {new Date().toLocaleDateString('en-MY', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-              {' — '}
-              {greeting.message}
-            </p>
+      <Card className="relative overflow-hidden border border-sidebar-primary/20 bg-gradient-to-br from-sidebar-primary/15 via-sidebar-primary/5 to-white shadow-sm">
+        <div className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-gradient-to-br from-sidebar-primary/25 to-sidebar/10 blur-2xl" />
+        <CardContent className="relative flex flex-col items-center gap-5 p-6 text-center sm:flex-row sm:justify-center sm:gap-8 sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sidebar-primary/30 via-sidebar-primary/15 to-transparent text-2xl">
+              {greeting.emoji}
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-gray-900">
+                {greeting.text},{' '}
+                <span className="capitalize text-sidebar-primary">{session?.name ?? 'Admin'}</span>
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {new Date().toLocaleDateString('en-MY', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}
+                {' — '}
+                {greeting.message}
+              </p>
+            </div>
           </div>
-          <div className="hidden gap-6 text-right sm:flex">
-            <div>
-              <p className="text-2xl font-bold">{stats.pendingJobs}</p>
-              <p className="text-xs text-muted-foreground">pending jobs</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{stats.awaitingReview}</p>
-              <p className="text-xs text-muted-foreground">awaiting review</p>
-            </div>
+
+          <div className="hidden h-12 w-px bg-sidebar-primary/20 sm:block" />
+
+          <div className="flex items-center gap-3">
+            <GreetingStat icon={Clock} value={stats.pendingJobs} label="Pending Jobs" />
+            <GreetingStat icon={CheckCircle2} value={stats.awaitingReview} label="Awaiting Review" />
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-2">
-        <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+        <p className="text-sm font-medium text-gray-700">Overview</p>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
             {(['7', '30', 'all'] as Range[]).map((r) => (
               <Button
                 key={r}
@@ -258,6 +290,7 @@ export default function Dashboard() {
             <RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
         </div>
+      </div>
       {loading ? (
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -280,34 +313,39 @@ export default function Dashboard() {
               label="Total Orders"
               value={stats.totalOrders.toString()}
               to="/admin/orders"
-              tone="bg-brand-50 text-brand-600"
+              tone="from-brand-500 to-brand-600"
+              wash="from-brand-500/25 to-transparent"
             />
             <StatCard
               icon={DollarSign}
               label="Total Revenue"
               value={`RM ${stats.totalRevenue.toFixed(2)}`}
-              tone="bg-emerald-50 text-emerald-600"
+              tone="from-emerald-500 to-emerald-600"
+              wash="from-emerald-500/25 to-transparent"
             />
             <StatCard
               icon={Users}
               label="Active Technicians"
               value={stats.activeTechs.toString()}
               to="/admin/technicians"
-              tone="bg-violet-50 text-violet-600"
+              tone="from-violet-500 to-violet-600"
+              wash="from-violet-500/25 to-transparent"
             />
             <StatCard
               icon={Clock}
               label="Pending Jobs"
               value={stats.pendingJobs.toString()}
               to="/admin/orders"
-              tone="bg-amber-50 text-amber-600"
+              tone="from-amber-500 to-amber-600"
+              wash="from-amber-500/25 to-transparent"
             />
             <StatCard
               icon={CheckCircle2}
               label="Awaiting Review"
               value={stats.awaitingReview.toString()}
               to="/admin/orders"
-              tone="bg-sky-50 text-sky-600"
+              tone="from-sky-500 to-sky-600"
+              wash="from-sky-500/25 to-transparent"
             />
           </div>
 
@@ -556,6 +594,24 @@ export default function Dashboard() {
                     <div className="h-64">
                       <ResponsiveContainer>
                         <BarChart data={techWorkload} layout="vertical">
+                          <defs>
+                            {STACK_SEGMENTS.map((seg) => {
+                              const [light, dark] = STATUS_GRADIENT.stops(seg.key)
+                              return (
+                                <linearGradient
+                                  key={STATUS_GRADIENT.id(seg.key)}
+                                  id={STATUS_GRADIENT.id(seg.key)}
+                                  x1="0"
+                                  y1="0"
+                                  x2="1"
+                                  y2="0"
+                                >
+                                  <stop offset="0%" stopColor={light} />
+                                  <stop offset="100%" stopColor={dark} />
+                                </linearGradient>
+                              )
+                            })}
+                          </defs>
                           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                           <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
                           <YAxis
@@ -577,7 +633,7 @@ export default function Dashboard() {
                               key={seg.key}
                               dataKey={seg.key}
                               stackId="a"
-                              fill={seg.color}
+                              fill={`url(#${STATUS_GRADIENT.id(seg.key)})`}
                               radius={0}
                             />
                           ))}
@@ -585,15 +641,18 @@ export default function Dashboard() {
                       </ResponsiveContainer>
                     </div>
                     <div className="mt-3 flex flex-wrap justify-center gap-3">
-                      {STACK_SEGMENTS.map((seg) => (
-                        <div key={seg.key} className="flex items-center gap-1.5 text-xs">
-                          <span
-                            className="size-2.5 rounded-full"
-                            style={{ backgroundColor: seg.color }}
-                          />
-                          {seg.label}
-                        </div>
-                      ))}
+                      {STACK_SEGMENTS.map((seg) => {
+                        const [light, dark] = STATUS_GRADIENT.stops(seg.key)
+                        return (
+                          <div key={seg.key} className="flex items-center gap-1.5 text-xs">
+                            <span
+                              className="size-2.5 rounded-full"
+                              style={{ background: `linear-gradient(90deg, ${light}, ${dark})` }}
+                            />
+                            {seg.label}
+                          </div>
+                        )
+                      })}
                     </div>
                   </>
                 )}
@@ -616,8 +675,12 @@ export default function Dashboard() {
                     <AreaChart data={revenueTrend}>
                       <defs>
                         <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.3} />
+                          <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.35} />
                           <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0} />
+                        </linearGradient>
+                        <linearGradient id="revenueStroke" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="var(--chart-1)" />
+                          <stop offset="100%" stopColor="var(--chart-2)" />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
@@ -635,9 +698,11 @@ export default function Dashboard() {
                       <Area
                         type="monotone"
                         dataKey="amount"
-                        stroke="var(--chart-2)"
+                        stroke="url(#revenueStroke)"
                         fill="url(#revenueGradient)"
-                        strokeWidth={2}
+                        strokeWidth={2.5}
+                        dot={{ r: 3, strokeWidth: 2, stroke: 'var(--chart-2)', fill: 'var(--card)' }}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: 'var(--chart-2)' }}
                       />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -706,30 +771,61 @@ export default function Dashboard() {
   )
 }
 
+function GreetingStat({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: typeof Briefcase
+  value: number
+  label: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-sm">
+        <Icon className="size-5 text-white" />
+      </div>
+      <div className="text-left">
+        <p className="text-xl leading-none font-bold text-gray-900">{value}</p>
+        <p className="mt-1 text-xs whitespace-nowrap text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({
   icon: Icon,
   label,
   value,
   to,
-  tone = 'bg-accent text-accent-foreground',
+  tone = 'from-slate-500 to-slate-600',
+  wash = 'from-slate-500/15 to-transparent',
 }: {
   icon: typeof Briefcase
   label: string
   value: string
   to?: string
   tone?: string
+  wash?: string
 }) {
   const content = (
-    <Card className={to ? 'transition-shadow hover:shadow-md' : ''}>
-      <CardContent className="flex items-center justify-between py-5">
+    <Card
+      className={`relative overflow-hidden border border-gray-200 ${to ? 'transition-shadow hover:shadow-md' : ''}`}
+    >
+      <div
+        className={`pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-gradient-to-br ${wash} blur-2xl`}
+      />
+      <CardContent className="relative flex items-center justify-between py-5">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {label}
           </p>
           <p className="mt-1 text-2xl font-semibold">{value}</p>
         </div>
-        <div className={`flex size-10 items-center justify-center rounded-lg ${tone}`}>
-          <Icon className="size-5" />
+        <div
+          className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm ${tone}`}
+        >
+          <Icon className="size-5 text-white" />
         </div>
       </CardContent>
     </Card>

@@ -78,11 +78,11 @@ async function main() {
           customer_name: customerName,
           phone: '60123456789',
           address: 'No. 1, Jalan Demo, Shah Alam',
-          problem_description: `${serviceType} request (demo seed data)`,
+          problem_description: `${serviceType} request (sample data)`,
           service_type: serviceType,
           quoted_price: quotedPrice,
           assigned_technician_id: byName.get(technicianName),
-          admin_notes: 'Seeded via scripts/seedDemoData.mjs for AI Operational Insight testing.',
+          admin_notes: 'This is sample data, added to test the AI insights feature.',
           status: 'Job Done',
         })
         .select('id')
@@ -91,10 +91,10 @@ async function main() {
 
       const { error: completionError } = await admin.from('service_completions').insert({
         order_id: order.id,
-        work_done: `${serviceType} completed. (demo seed data)`,
+        work_done: `${serviceType} completed. (sample data)`,
         extra_charges: 0,
         final_amount: quotedPrice,
-        remarks: 'Seeded demo completion.',
+        remarks: 'Sample completion record.',
         technician_name: technicianName,
         completed_at: completedAt.toISOString(),
       })

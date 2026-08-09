@@ -1,6 +1,18 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban } from 'lucide-react'
+import {
+  ArrowLeft,
+  Ban,
+  Banknote,
+  CalendarCheck,
+  CheckCircle2,
+  Image as ImageIcon,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Phone,
+  type LucideIcon,
+} from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
 import { notifyTechnician } from '../../lib/notifications'
@@ -8,20 +20,11 @@ import { getErrorMessage } from '../../lib/errors'
 import { canCancel } from '../../lib/orderStatus'
 import { useAuth } from '../../context/AuthContext'
 import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
-import { SERVICE_TYPES, type CompletionAttachment, type Order, type ServiceCompletion, type Technician } from '../../types'
+import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
-import { Input } from '../../components/ui/input'
-import { Label } from '../../components/ui/label'
+import { Card } from '../../components/ui/card'
 import { Textarea } from '../../components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -31,15 +34,37 @@ import {
   DialogTitle,
 } from '../../components/ui/dialog'
 
-type OrderWithCompletion = Order & {
-  service_completions: (ServiceCompletion & { completion_attachments: CompletionAttachment[] })[]
+const AVATAR_COLORS = [
+  'bg-blue-100 text-blue-700',
+  'bg-emerald-100 text-emerald-700',
+  'bg-amber-100 text-amber-700',
+  'bg-violet-100 text-violet-700',
+  'bg-rose-100 text-rose-700',
+  'bg-cyan-100 text-cyan-700',
+  'bg-orange-100 text-orange-700',
+  'bg-sky-100 text-sky-700',
+]
+
+function getInitials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase()
 }
 
-function toDatetimeLocal(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+function getAvatarColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
+}
+
+type OrderWithCompletion = Order & {
+  service_completions: (ServiceCompletion & { completion_attachments: CompletionAttachment[] })[]
 }
 
 export default function OrderDetail() {
@@ -48,25 +73,7 @@ export default function OrderDetail() {
   const { setPageTitle } = useOutletContext<{ setPageTitle: (t: string) => void }>()
 
   const [order, setOrder] = useState<OrderWithCompletion | null>(null)
-  const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
-
-  const [form, setForm] = useState({
-    customer_name: '',
-    phone: '',
-    address: '',
-    problem_description: '',
-    service_type: SERVICE_TYPES[0] as string,
-    quoted_price: '',
-    admin_notes: '',
-    assigned_technician_id: '',
-    scheduled_at: '',
-  })
-  const [originalScheduledAt, setOriginalScheduledAt] = useState('')
-  const [rescheduleReason, setRescheduleReason] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
 
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -76,11 +83,6 @@ export default function OrderDetail() {
   useEffect(() => {
     if (!id) return
     void load(id)
-    supabase
-      .from('technicians')
-      .select('id, name, phone, active')
-      .order('name')
-      .then(({ data }) => setTechnicians((data as Technician[]) ?? []))
   }, [id])
 
   useEffect(() => {
@@ -96,106 +98,8 @@ export default function OrderDetail() {
       .select('*, technicians ( id, name, phone ), service_completions ( *, completion_attachments ( * ) )')
       .eq('id', orderId)
       .single()
-    const o = data as unknown as OrderWithCompletion | null
-    setOrder(o)
-    if (o) {
-      const schedLocal = toDatetimeLocal(o.scheduled_at)
-      setForm({
-        customer_name: o.customer_name,
-        phone: o.phone,
-        address: o.address,
-        problem_description: o.problem_description,
-        service_type: o.service_type,
-        quoted_price: String(o.quoted_price),
-        admin_notes: o.admin_notes ?? '',
-        assigned_technician_id: o.assigned_technician_id ?? '',
-        scheduled_at: schedLocal,
-      })
-      setOriginalScheduledAt(schedLocal)
-    }
+    setOrder(data as unknown as OrderWithCompletion | null)
     setLoading(false)
-  }
-
-  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [key]: value }))
-  }
-
-  // A "reschedule" is changing an *already-set* date — setting the first
-  // schedule on a previously-unscheduled order is just a normal edit, not
-  // something that should count toward the reschedule metric.
-  const scheduleChanged = form.scheduled_at !== originalScheduledAt
-  const isReschedule = scheduleChanged && originalScheduledAt !== ''
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!order || !session) return
-    setError(null)
-    setSaving(true)
-    try {
-      const newScheduledAt = form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null
-      const wasUnassigned = !order.assigned_technician_id
-      const nowAssigned = !!form.assigned_technician_id
-      const statusBump = order.status === 'New' && wasUnassigned && nowAssigned
-
-      const { error: updateError } = await supabase
-        .from('orders')
-        .update({
-          customer_name: form.customer_name,
-          phone: form.phone,
-          address: form.address,
-          problem_description: form.problem_description,
-          service_type: form.service_type,
-          quoted_price: Number(form.quoted_price) || 0,
-          admin_notes: form.admin_notes || null,
-          assigned_technician_id: form.assigned_technician_id || null,
-          scheduled_at: newScheduledAt,
-          ...(statusBump ? { status: 'Assigned' } : {}),
-        })
-        .eq('id', order.id)
-      if (updateError) throw updateError
-
-      if (isReschedule) {
-        await supabase.from('order_reschedules').insert({
-          order_id: order.id,
-          previous_scheduled_at: order.scheduled_at,
-          new_scheduled_at: newScheduledAt,
-          reason: rescheduleReason || null,
-          changed_by_name: session.name,
-        })
-      }
-
-      await logAction({
-        orderId: order.id,
-        action: isReschedule ? 'Order updated and rescheduled' : 'Order updated',
-        actorRole: 'admin',
-        actorName: session.name,
-      })
-
-      const technicianChanged = form.assigned_technician_id !== (order.assigned_technician_id ?? '')
-      if (technicianChanged && form.assigned_technician_id) {
-        await notifyTechnician(form.assigned_technician_id, {
-          title: 'Job assigned to you',
-          body: `${order.order_no} — ${form.service_type} for ${form.customer_name}`,
-          orderId: order.id,
-          link: '/technician/jobs',
-        })
-      } else if (isReschedule && form.assigned_technician_id) {
-        await notifyTechnician(form.assigned_technician_id, {
-          title: 'Job rescheduled',
-          body: `${order.order_no} rescheduled to ${newScheduledAt ? new Date(newScheduledAt).toLocaleString() : 'unscheduled'}`,
-          orderId: order.id,
-          link: '/technician/jobs',
-        })
-      }
-
-      setSaved(true)
-      setRescheduleReason('')
-      await load(order.id)
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to save order'))
-    } finally {
-      setSaving(false)
-    }
   }
 
   async function handleCancel() {
@@ -229,6 +133,7 @@ export default function OrderDetail() {
       }
 
       setCancelOpen(false)
+      setCancelReason('')
       await load(order.id)
     } catch (err) {
       setCancelError(getErrorMessage(err, 'Failed to cancel order'))
@@ -243,145 +148,119 @@ export default function OrderDetail() {
   const completion = order.service_completions?.[0]
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="mx-auto max-w-3xl space-y-6 p-1">
+      <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon-sm" asChild>
           <Link to="/admin/orders">
             <ArrowLeft />
           </Link>
         </Button>
-        <div className="flex-1" />
+        <div className="min-w-0 flex-1">
+          <h1 className="font-mono text-lg font-semibold text-gray-900">{order.order_no}</h1>
+          <p className="text-xs text-gray-500">
+            Created{' '}
+            {new Date(order.created_at).toLocaleString(undefined, {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+            })}
+          </p>
+        </div>
         <StatusBadge status={order.status} />
+        <Button asChild size="sm">
+          <Link to={`/admin/orders/${order.id}/edit`}>
+            <Pencil className="size-4" />
+            Edit
+          </Link>
+        </Button>
       </div>
 
-      <Card>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Customer Name" required>
-                <Input
-                  required
-                  value={form.customer_name}
-                  onChange={(e) => update('customer_name', e.target.value)}
-                />
-              </Field>
-              <Field label="Phone" required>
-                <Input
-                  required
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => update('phone', e.target.value)}
-                />
-              </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customer</h2>
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${getAvatarColor(order.customer_name)}`}
+            >
+              {getInitials(order.customer_name)}
             </div>
-
-            <Field label="Address" required>
-              <Textarea
-                required
-                rows={2}
-                value={form.address}
-                onChange={(e) => update('address', e.target.value)}
-              />
-            </Field>
-
-            <Field label="Problem Description" required>
-              <Textarea
-                required
-                rows={3}
-                value={form.problem_description}
-                onChange={(e) => update('problem_description', e.target.value)}
-              />
-            </Field>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Service Type" required>
-                <Select
-                  value={form.service_type}
-                  onValueChange={(value) => update('service_type', value)}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Quoted Price (RM)" required>
-                <Input
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.quoted_price}
-                  onChange={(e) => update('quoted_price', e.target.value)}
-                />
-              </Field>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-gray-900">{order.customer_name}</p>
+              <p className="text-sm text-gray-500">{order.phone}</p>
             </div>
-
-            <Field label="Assigned Technician">
-              <Select
-                value={form.assigned_technician_id || 'unassigned'}
-                onValueChange={(value) =>
-                  update('assigned_technician_id', value === 'unassigned' ? '' : value)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {technicians.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                      {!t.active ? ' (inactive)' : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Scheduled For">
-              <Input
-                type="datetime-local"
-                value={form.scheduled_at}
-                onChange={(e) => update('scheduled_at', e.target.value)}
-              />
-            </Field>
-
-            {isReschedule && (
-              <Field label="Reason for reschedule">
-                <Input
-                  placeholder="e.g. customer requested a later time"
-                  value={rescheduleReason}
-                  onChange={(e) => setRescheduleReason(e.target.value)}
-                />
-              </Field>
-            )}
-
-            <Field label="Admin Notes">
-              <Textarea
-                rows={2}
-                value={form.admin_notes}
-                onChange={(e) => update('admin_notes', e.target.value)}
-              />
-            </Field>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {saved && <p className="text-sm text-emerald-600">Saved.</p>}
-
-            <Button type="submit" disabled={saving} className="w-full">
-              {saving ? 'Saving…' : 'Save Changes'}
+          </div>
+          <div className="flex items-start gap-1.5 text-sm text-gray-600">
+            <MapPin className="mt-0.5 size-3.5 shrink-0 text-gray-400" />
+            <span>{order.address}</span>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
+              <a href={`tel:${order.phone}`}>
+                <Phone className="size-3.5" />
+                Call
+              </a>
             </Button>
-          </form>
-        </CardContent>
+            <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
+              <a
+                href={buildWhatsAppLink(order.phone, `Hi ${order.customer_name}, regarding your order ${order.order_no}...`)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircle className="size-3.5" />
+                WhatsApp
+              </a>
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="rounded-xl border border-gray-200 shadow-sm p-4">
+          <h2 className="mb-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Job Details
+          </h2>
+          <div className="divide-y divide-gray-100">
+            <DetailRow label="Service">
+              <span className="inline-flex items-center rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                {order.service_type}
+              </span>
+            </DetailRow>
+            <DetailRow label="Quoted Price">
+              RM {Number(order.quoted_price).toFixed(2)}
+            </DetailRow>
+            <DetailRow label="Technician">{order.technicians?.name ?? 'Not assigned yet'}</DetailRow>
+            <DetailRow label="Scheduled For">
+              {order.scheduled_at
+                ? new Date(order.scheduled_at).toLocaleString(undefined, {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                  })
+                : 'No date set yet'}
+            </DetailRow>
+          </div>
+        </Card>
+      </div>
+
+      <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-1.5">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          Problem Description
+        </h2>
+        <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.problem_description}</p>
       </Card>
 
-      {saved && order.technicians?.phone && (
+      {order.admin_notes && (
+        <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-1.5">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Admin Notes
+          </h2>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.admin_notes}</p>
+        </Card>
+      )}
+
+      {order.technicians?.phone && (
         <a
           href={buildWhatsAppLink(
             order.technicians.phone,
@@ -391,67 +270,87 @@ export default function OrderDetail() {
               customerName: order.customer_name,
               address: order.address,
               serviceType: order.service_type,
-              scheduledAt: order.scheduled_at
-                ? new Date(order.scheduled_at).toLocaleString()
-                : null,
+              scheduledAt: order.scheduled_at ? new Date(order.scheduled_at).toLocaleString() : null,
             }),
           )}
           target="_blank"
           rel="noreferrer"
           className="block w-full rounded-lg bg-emerald-600 py-2.5 text-center text-sm font-medium text-white hover:bg-emerald-700"
         >
-          Notify {order.technicians.name} via WhatsApp
+          Message {order.technicians.name} via WhatsApp
         </a>
       )}
 
       {completion && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Service Completion</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <p>{completion.work_done}</p>
-            {completion.remarks && (
-              <p className="text-muted-foreground">Remarks: {completion.remarks}</p>
-            )}
-            <div className="flex flex-wrap gap-x-6 gap-y-1 text-muted-foreground">
-              <span>Final Amount: RM {Number(completion.final_amount).toFixed(2)}</span>
-              <span>Attachments: {completion.completion_attachments?.length ?? 0}</span>
-              <span>Completed: {new Date(completion.completed_at).toLocaleString()}</span>
+        <Card className="rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-3">
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+              <CheckCircle2 className="size-3.5 text-emerald-600" />
             </div>
-          </CardContent>
+            <h2 className="text-sm font-semibold text-emerald-900">Service Completion</h2>
+          </div>
+          <div className="space-y-4 p-4">
+            <p className="text-sm font-medium leading-relaxed text-gray-900">
+              {completion.work_done}
+            </p>
+            {completion.remarks && (
+              <div className="border-l-2 border-gray-200 pl-3">
+                <p className="text-sm italic text-gray-500">&ldquo;{completion.remarks}&rdquo;</p>
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-3">
+              <StatChip
+                icon={Banknote}
+                label="Amount Charged"
+                value={`RM ${Number(completion.final_amount).toFixed(2)}`}
+              />
+              <StatChip
+                icon={ImageIcon}
+                label="Photos"
+                value={String(completion.completion_attachments?.length ?? 0)}
+              />
+              <StatChip
+                icon={CalendarCheck}
+                label="Completed"
+                value={new Date(completion.completed_at).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              />
+            </div>
+          </div>
         </Card>
       )}
 
       {canCancel(order.status) && (
-        <Card className="border-destructive/30">
-          <CardContent className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Cancel this order</p>
-              <p className="text-sm text-muted-foreground">
-                Only possible before a technician has started work.
-              </p>
-            </div>
-            <Button variant="destructive" onClick={() => setCancelOpen(true)}>
-              <Ban />
-              Cancel Order
-            </Button>
-          </CardContent>
+        <Card className="rounded-xl border border-destructive/30 shadow-sm p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Cancel this order</p>
+            <p className="text-sm text-gray-500">
+              You can only cancel before a technician starts the job.
+            </p>
+          </div>
+          <Button variant="destructive" onClick={() => setCancelOpen(true)}>
+            <Ban />
+            Cancel Order
+          </Button>
         </Card>
       )}
 
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Cancel {order.order_no}?</DialogTitle>
+            <DialogTitle>Cancel order {order.order_no}?</DialogTitle>
             <DialogDescription>
-              This can't be undone. Please give a reason — it's recorded on the order and
-              in the audit log.
+              This can't be undone. Please tell us why — it will be saved with this order
+              so anyone can see the reason later.
             </DialogDescription>
           </DialogHeader>
           <Textarea
             required
-            placeholder="Reason for cancellation"
+            placeholder="Why is this order being cancelled?"
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
           />
@@ -462,7 +361,7 @@ export default function OrderDetail() {
               disabled={cancelling || !cancelReason.trim()}
               onClick={handleCancel}
             >
-              {cancelling ? 'Cancelling…' : 'Confirm Cancellation'}
+              {cancelling ? 'Cancelling…' : 'Yes, Cancel This Order'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -471,21 +370,23 @@ export default function OrderDetail() {
   )
 }
 
-function Field({
-  label,
-  required,
-  children,
-}: {
-  label: string
-  required?: boolean
-  children: ReactNode
-}) {
+function DetailRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="space-y-1.5">
-      <Label>
-        {label} {required && <span className="text-destructive">*</span>}
-      </Label>
-      {children}
+    <div className="flex items-center justify-between gap-4 py-2 text-sm">
+      <span className="text-gray-500">{label}</span>
+      <span className="font-medium text-gray-900">{children}</span>
+    </div>
+  )
+}
+
+function StatChip({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-3">
+      <div className="flex items-center gap-1.5 text-gray-400">
+        <Icon className="size-3.5" />
+        <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
+      </div>
+      <p className="mt-1 truncate text-sm font-semibold text-gray-900">{value}</p>
     </div>
   )
 }

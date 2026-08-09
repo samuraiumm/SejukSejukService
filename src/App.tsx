@@ -7,6 +7,7 @@ import NewOrder from './pages/admin/NewOrder'
 import OrdersList from './pages/admin/OrdersList'
 import Technicians from './pages/admin/Technicians'
 import OrderDetail from './pages/admin/OrderDetail'
+import OrderEdit from './pages/admin/OrderEdit'
 import AdminDashboard from './pages/admin/Dashboard'
 import Calendar from './pages/admin/Calendar'
 import Schedule from './pages/admin/Schedule'
@@ -72,6 +73,14 @@ function App() {
           element={
             <RequireRole role="admin">
               <OrderDetail />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/admin/orders/:id/edit"
+          element={
+            <RequireRole role="admin">
+              <OrderEdit />
             </RequireRole>
           }
         />

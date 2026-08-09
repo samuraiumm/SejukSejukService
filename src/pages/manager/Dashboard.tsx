@@ -202,38 +202,42 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
-      <Card className="overflow-hidden border-0 bg-gradient-to-r from-primary/5 via-accent/50 to-transparent shadow-sm">
-        <CardContent className="flex items-center justify-between p-5">
-          <div>
-            <p className="text-lg font-semibold">
-              {greeting.emoji} {greeting.text}, <span className="capitalize">{session?.name ?? 'Manager'}</span>
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {new Date().toLocaleDateString('en-MY', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })}
-              {' — '}
-              {greeting.message}
-            </p>
+      <Card className="relative overflow-hidden border border-sidebar-primary/20 bg-gradient-to-br from-sidebar-primary/15 via-sidebar-primary/5 to-white shadow-sm">
+        <div className="pointer-events-none absolute -top-16 -right-16 size-48 rounded-full bg-gradient-to-br from-sidebar-primary/25 to-sidebar/10 blur-2xl" />
+        <CardContent className="relative flex flex-col items-center gap-5 p-6 text-center sm:flex-row sm:justify-center sm:gap-8 sm:text-left">
+          <div className="flex items-center gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-sidebar-primary/30 via-sidebar-primary/15 to-transparent text-2xl">
+              {greeting.emoji}
+            </div>
+            <div>
+              <p className="text-lg font-semibold text-gray-900">
+                {greeting.text},{' '}
+                <span className="capitalize text-sidebar-primary">{session?.name ?? 'Manager'}</span>
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {new Date().toLocaleDateString('en-MY', {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric',
+                })}
+                {' — '}
+                {greeting.message}
+              </p>
+            </div>
           </div>
-          <div className="hidden gap-6 text-right sm:flex">
-            <div>
-              <p className="text-2xl font-bold">{pendingReview}</p>
-              <p className="text-xs text-muted-foreground">awaiting review</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{flaggedCount}</p>
-              <p className="text-xs text-muted-foreground">flagged</p>
-            </div>
+
+          <div className="hidden h-12 w-px bg-sidebar-primary/20 sm:block" />
+
+          <div className="flex items-center gap-3">
+            <GreetingStat icon={ClipboardCheck} value={pendingReview} label="Awaiting Review" />
+            <GreetingStat icon={AlertTriangle} value={flaggedCount} label="Flagged" />
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <div />
+      <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+        <p className="text-sm font-medium text-gray-700">Overview</p>
         <div className="flex gap-1 rounded-lg bg-muted p-1 text-sm">
           {(['7', '30'] as Range[]).map((r) => (
             <Button
@@ -262,32 +266,37 @@ export default function Dashboard() {
               label="Awaiting Review"
               value={pendingReview.toString()}
               to="/manager/review"
-              tone="bg-sky-50 text-sky-600"
+              tone="from-sky-500 to-sky-600"
+              wash="from-sky-500/25 to-transparent"
             />
             <StatCard
               icon={AlertTriangle}
               label="Flagged"
               value={flaggedCount.toString()}
               to="/manager/review"
-              tone="bg-red-50 text-red-600"
+              tone="from-red-500 to-red-600"
+              wash="from-red-500/25 to-transparent"
             />
             <StatCard
               icon={Briefcase}
               label="Jobs Completed"
               value={totals.jobs.toString()}
-              tone="bg-brand-50 text-brand-600"
+              tone="from-brand-500 to-brand-600"
+              wash="from-brand-500/25 to-transparent"
             />
             <StatCard
               icon={DollarSign}
               label="Total Amount"
               value={`RM ${totals.amount.toFixed(2)}`}
-              tone="bg-emerald-50 text-emerald-600"
+              tone="from-emerald-500 to-emerald-600"
+              wash="from-emerald-500/25 to-transparent"
             />
             <StatCard
               icon={Users}
               label="Active Technicians"
               value={stats.length.toString()}
-              tone="bg-violet-50 text-violet-600"
+              tone="from-violet-500 to-violet-600"
+              wash="from-violet-500/25 to-transparent"
             />
           </div>
 
@@ -469,30 +478,61 @@ export default function Dashboard() {
   )
 }
 
+function GreetingStat({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: typeof Briefcase
+  value: number
+  label: string
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-sm">
+        <Icon className="size-5 text-white" />
+      </div>
+      <div className="text-left">
+        <p className="text-xl leading-none font-bold text-gray-900">{value}</p>
+        <p className="mt-1 text-xs whitespace-nowrap text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  )
+}
+
 function StatCard({
   icon: Icon,
   label,
   value,
   to,
-  tone = 'bg-accent text-accent-foreground',
+  tone = 'from-slate-500 to-slate-600',
+  wash = 'from-slate-500/15 to-transparent',
 }: {
   icon: typeof Briefcase
   label: string
   value: string
   to?: string
   tone?: string
+  wash?: string
 }) {
   const content = (
-    <Card className={to ? 'transition-shadow hover:shadow-md' : ''}>
-      <CardContent className="flex items-center justify-between">
+    <Card
+      className={`relative overflow-hidden border border-gray-200 ${to ? 'transition-shadow hover:shadow-md' : ''}`}
+    >
+      <div
+        className={`pointer-events-none absolute -top-8 -right-8 size-28 rounded-full bg-gradient-to-br ${wash} blur-2xl`}
+      />
+      <CardContent className="relative flex items-center justify-between">
         <div>
           <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
             {label}
           </p>
           <p className="mt-1 text-2xl font-semibold">{value}</p>
         </div>
-        <div className={`flex size-10 items-center justify-center rounded-lg ${tone}`}>
-          <Icon className="size-5" />
+        <div
+          className={`flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br shadow-sm ${tone}`}
+        >
+          <Icon className="size-5 text-white" />
         </div>
       </CardContent>
     </Card>
