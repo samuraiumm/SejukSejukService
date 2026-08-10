@@ -21,6 +21,7 @@ import { canCancel } from '../../lib/orderStatus'
 import { useAuth } from '../../context/AuthContext'
 import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
+import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/ui/button'
 import { Card } from '../../components/ui/card'
@@ -320,6 +321,10 @@ export default function OrderDetail() {
                 })}
               />
             </div>
+            <CompletionAttachmentsGallery
+              attachments={completion.completion_attachments}
+              receiptPhotoUrl={completion.receipt_photo_url}
+            />
           </div>
         </Card>
       )}

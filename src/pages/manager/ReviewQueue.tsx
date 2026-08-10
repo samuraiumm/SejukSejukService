@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext'
 import { generatePages } from '../../lib/pagination'
 import { useDebounce } from '../../hooks/useDebounce'
 import type { CompletionAttachment, Order, ServiceCompletion, Technician } from '../../types'
+import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import StatusBadge from '../../components/StatusBadge'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
@@ -303,6 +304,10 @@ export default function ReviewQueue() {
                             {completion.remarks}
                           </p>
                         )}
+                        <CompletionAttachmentsGallery
+                          attachments={attachments}
+                          receiptPhotoUrl={completion.receipt_photo_url}
+                        />
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground">No completion record found.</p>
