@@ -389,14 +389,14 @@ export default function TechnicianDashboard() {
 
           <div className="hidden h-12 w-px bg-sidebar-primary/20 sm:block" />
 
-          <div className="flex items-center gap-3">
+          <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:items-center">
             <GreetingStat icon={Briefcase} value={allTimeStats.total} label="Jobs Completed (All-Time)" />
             <GreetingStat
               icon={DollarSign}
               value={`RM ${allTimeStats.revenue.toFixed(2)}`}
               label="Earned (All-Time)"
             />
-            <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+            <div className="col-span-2 flex items-center justify-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm sm:col-span-1 sm:justify-start">
               <ProgressRing
                 value={weeklyProgress.completed}
                 max={weeklyProgress.total}
@@ -583,38 +583,49 @@ export default function TechnicianDashboard() {
                 {serviceTypeData.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No data yet.</p>
                 ) : (
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={serviceTypeData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          innerRadius={50}
-                          label={({ name, value }) => `${name} (${value})`}
-                          labelLine={false}
-                        >
-                          {serviceTypeData.map((entry) => (
-                            <Cell
-                              key={entry.name}
-                              fill={SERVICE_COLORS[entry.name] ?? 'var(--chart-3)'}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: 'var(--card)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-md)',
-                            fontSize: 13,
-                          }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
+                  <>
+                    <div className="h-56">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={serviceTypeData}
+                            dataKey="value"
+                            nameKey="name"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            innerRadius={50}
+                          >
+                            {serviceTypeData.map((entry) => (
+                              <Cell
+                                key={entry.name}
+                                fill={SERVICE_COLORS[entry.name] ?? 'var(--chart-3)'}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'var(--card)',
+                              border: '1px solid var(--border)',
+                              borderRadius: 'var(--radius-md)',
+                              fontSize: 13,
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-3 flex flex-wrap justify-center gap-3">
+                      {serviceTypeData.map((s) => (
+                        <div key={s.name} className="flex items-center gap-1.5 text-xs">
+                          <span
+                            className="size-2.5 rounded-full"
+                            style={{ backgroundColor: SERVICE_COLORS[s.name] ?? 'var(--chart-3)' }}
+                          />
+                          {s.name} ({s.value})
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -654,7 +665,32 @@ export default function TechnicianDashboard() {
               {recentCompletions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No completed jobs yet.</p>
               ) : (
-                <Table>
+                <>
+                  {/* Stacked list on mobile — avoids a 4-column table needing horizontal
+                      scroll to reach "Duration" on a narrow screen. */}
+                  <div className="space-y-2 sm:hidden">
+                    {recentCompletions.map((c) => (
+                      <div
+                        key={c.id}
+                        className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-mono text-xs font-medium">{c.orders?.order_no ?? '—'}</p>
+                          <p className="truncate text-muted-foreground">
+                            {c.orders?.customer_name ?? '—'}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-medium">RM {Number(c.final_amount).toFixed(2)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDuration(c.started_at, c.completed_at)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <Table className="hidden sm:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order</TableHead>
@@ -676,6 +712,7 @@ export default function TechnicianDashboard() {
                     ))}
                   </TableBody>
                 </Table>
+                </>
               )}
             </CardContent>
           </Card>
@@ -695,13 +732,13 @@ function GreetingStat({
   label: string
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-4 py-3 shadow-sm backdrop-blur-sm">
+    <div className="flex items-center gap-3 rounded-xl border border-sidebar-primary/20 bg-white/80 px-3 py-3 shadow-sm backdrop-blur-sm">
       <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sidebar-primary to-sidebar-primary/70 shadow-sm">
         <Icon className="size-5 text-white" />
       </div>
-      <div className="text-left">
+      <div className="min-w-0 text-left">
         <p className="text-xl leading-none font-bold text-gray-900">{value}</p>
-        <p className="mt-1 text-xs whitespace-nowrap text-muted-foreground">{label}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
   )

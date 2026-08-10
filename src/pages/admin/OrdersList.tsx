@@ -21,6 +21,7 @@ import { supabase } from '../../lib/supabaseClient'
 import type { Order, OrderStatus, Technician } from '../../types'
 import { STATUS_ORDER } from '../../lib/orderStatus'
 import { generatePages } from '../../lib/pagination'
+import { useDebounce } from '../../hooks/useDebounce'
 import { useAuth } from '../../context/AuthContext'
 import { logAction } from '../../lib/audit'
 import { notifyTechnician } from '../../lib/notifications'
@@ -69,15 +70,6 @@ const STATUS_DOT: Record<OrderStatus, string> = {
 
 type SortField = 'created_at' | 'order_no' | 'customer_name' | 'service_type' | 'quoted_price' | 'status'
 type SortDir = 'asc' | 'desc'
-
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(timer)
-  }, [value, delay])
-  return debounced
-}
 
 function getInitials(name: string): string {
   return name

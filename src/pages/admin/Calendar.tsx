@@ -349,70 +349,129 @@ export default function Calendar() {
         <Skeleton className="h-[500px] w-full rounded-xl" />
       ) : viewMode === 'week' ? (
         <Card className="rounded-xl border-gray-200 shadow-sm overflow-hidden">
-          <CardContent className="overflow-x-auto p-0">
-            <div className="min-w-[860px]">
-              <div className="grid grid-cols-[180px_repeat(7,minmax(0,1fr))] border-b border-gray-100 bg-gray-50/60">
-                <div className="px-3 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Technician
+          <CardContent className="p-0">
+            {/* Mobile: vertical day-by-day agenda. The technician × day grid
+                below needs 860px+ to be readable at all — even with horizontal
+                scroll, comparing one technician's week means constantly
+                swiping back and forth, so it's replaced entirely on mobile
+                rather than just shrunk. */}
+            <div className="divide-y divide-gray-100 sm:hidden">
+              {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((d) => {
+                const dayOrders = orders.filter(
+                  (o) => o.scheduled_at && sameDay(new Date(o.scheduled_at), d),
+                )
+                const isToday = sameDay(d, todayDate)
+                return (
+                  <div key={d.toDateString()} className={`p-3 ${isToday ? 'bg-teal-50/60' : ''}`}>
+                    <p
+                      className={`mb-2 text-xs font-semibold uppercase tracking-wider ${
+                        isToday ? 'text-teal-700' : 'text-gray-500'
+                      }`}
+                    >
+                      {WEEKDAYS[d.getDay()]} &middot; {MONTH_NAMES[d.getMonth()].slice(0, 3)} {d.getDate()}
+                    </p>
+                    {dayOrders.length === 0 ? (
+                      <p className="text-xs text-gray-400">No jobs scheduled.</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {dayOrders.map((o) => {
+                          const tech = technicians.find((t) => t.id === o.assigned_technician_id)
+                          return (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => setSelectedDate(d)}
+                              className="flex w-full items-center gap-2 rounded-lg border border-gray-100 bg-white px-2.5 py-2 text-left"
+                            >
+                              <span
+                                className="size-2 shrink-0 rounded-full"
+                                style={{ backgroundColor: techColorFor(o.assigned_technician_id) }}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-gray-800">
+                                  {o.customer_name}
+                                </p>
+                                <p className="truncate text-[11px] text-gray-400">
+                                  {tech?.name ?? 'Unassigned'}
+                                </p>
+                              </div>
+                              <StatusBadge status={o.status} />
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Tablet/desktop: technician × day grid, unchanged. */}
+            <div className="hidden overflow-x-auto sm:block">
+              <div className="min-w-[860px]">
+                <div className="grid grid-cols-[180px_repeat(7,minmax(0,1fr))] border-b border-gray-100 bg-gray-50/60">
+                  <div className="px-3 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Technician
+                  </div>
+                  {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((d) => (
+                    <div
+                      key={d.toDateString()}
+                      className={`border-l border-gray-100 px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wider ${
+                        sameDay(d, todayDate) ? 'text-teal-600' : 'text-gray-400'
+                      }`}
+                    >
+                      {WEEKDAYS[d.getDay()]}{' '}
+                      <span className={sameDay(d, todayDate) ? 'text-teal-700' : 'text-gray-600'}>
+                        {d.getDate()}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((d) => (
+
+                {weekRows.map((row) => (
                   <div
-                    key={d.toDateString()}
-                    className={`border-l border-gray-100 px-2 py-2.5 text-center text-xs font-semibold uppercase tracking-wider ${
-                      sameDay(d, todayDate) ? 'text-teal-600' : 'text-gray-400'
-                    }`}
+                    key={row.id}
+                    className="grid grid-cols-[180px_repeat(7,minmax(0,1fr))] border-b border-gray-100 last:border-b-0"
                   >
-                    {WEEKDAYS[d.getDay()]}{' '}
-                    <span className={sameDay(d, todayDate) ? 'text-teal-700' : 'text-gray-600'}>
-                      {d.getDate()}
-                    </span>
+                    <div className="flex items-center gap-2 px-3 py-3">
+                      <span
+                        className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
+                          row.id === 'unassigned'
+                            ? 'bg-gray-100 text-gray-500'
+                            : 'bg-teal-50 text-teal-700'
+                        }`}
+                      >
+                        {row.id === 'unassigned' ? '—' : getInitials(row.name)}
+                      </span>
+                      <span className="truncate text-sm font-medium text-gray-700">{row.name}</span>
+                    </div>
+                    {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((d) => {
+                      const dayOrders = row.orders.filter(
+                        (o) => o.scheduled_at && sameDay(new Date(o.scheduled_at), d),
+                      )
+                      return (
+                        <div key={d.toDateString()} className="border-l border-gray-100 p-1.5">
+                          {dayOrders.map((o) => (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => setSelectedDate(d)}
+                              className="mb-1 block w-full truncate rounded px-1.5 py-1 text-left text-[10px] font-semibold last:mb-0"
+                              style={{
+                                backgroundColor: `${STATUS_COLORS[o.status]}22`,
+                                color: STATUS_COLORS[o.status],
+                              }}
+                              title={`${o.order_no} — ${o.customer_name} (${o.status})`}
+                            >
+                              {o.customer_name}
+                            </button>
+                          ))}
+                        </div>
+                      )
+                    })}
                   </div>
                 ))}
               </div>
-
-              {weekRows.map((row) => (
-                <div
-                  key={row.id}
-                  className="grid grid-cols-[180px_repeat(7,minmax(0,1fr))] border-b border-gray-100 last:border-b-0"
-                >
-                  <div className="flex items-center gap-2 px-3 py-3">
-                    <span
-                      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                        row.id === 'unassigned'
-                          ? 'bg-gray-100 text-gray-500'
-                          : 'bg-teal-50 text-teal-700'
-                      }`}
-                    >
-                      {row.id === 'unassigned' ? '—' : getInitials(row.name)}
-                    </span>
-                    <span className="truncate text-sm font-medium text-gray-700">{row.name}</span>
-                  </div>
-                  {Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)).map((d) => {
-                    const dayOrders = row.orders.filter(
-                      (o) => o.scheduled_at && sameDay(new Date(o.scheduled_at), d),
-                    )
-                    return (
-                      <div key={d.toDateString()} className="border-l border-gray-100 p-1.5">
-                        {dayOrders.map((o) => (
-                          <button
-                            key={o.id}
-                            type="button"
-                            onClick={() => setSelectedDate(d)}
-                            className="mb-1 block w-full truncate rounded px-1.5 py-1 text-left text-[10px] font-semibold last:mb-0"
-                            style={{
-                              backgroundColor: `${STATUS_COLORS[o.status]}22`,
-                              color: STATUS_COLORS[o.status],
-                            }}
-                            title={`${o.order_no} — ${o.customer_name} (${o.status})`}
-                          >
-                            {o.customer_name}
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })}
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>
@@ -448,7 +507,7 @@ export default function Calendar() {
                   <button
                     key={key}
                     type="button"
-                    className={`min-h-[96px] border-b border-r border-gray-100 p-1.5 text-left transition-colors hover:bg-gray-50 ${
+                    className={`min-h-[60px] border-b border-r border-gray-100 p-1 text-left transition-colors hover:bg-gray-50 sm:min-h-[96px] sm:p-1.5 ${
                       dayOrders.length > 0 ? 'cursor-pointer' : ''
                     } ${isToday ? 'bg-teal-50/60 ring-1 ring-inset ring-teal-200' : ''}`}
                     onClick={() => {
@@ -456,13 +515,35 @@ export default function Calendar() {
                     }}
                   >
                     <span
-                      className={`inline-flex size-6 items-center justify-center rounded-full text-xs font-medium ${
+                      className={`inline-flex size-5 items-center justify-center rounded-full text-[11px] font-medium sm:size-6 sm:text-xs ${
                         isToday ? 'bg-teal-600 text-white' : 'text-gray-700'
                       }`}
                     >
                       {day}
                     </span>
-                    <div className="mt-1 space-y-1">
+
+                    {/* Mobile: dots only — a 55px-wide cell can't fit readable
+                        customer-name chips, and tapping the day already opens
+                        the full order list, so dots just signal "something's
+                        here." */}
+                    {dayOrders.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-0.5 sm:hidden">
+                        {dayOrders.slice(0, 6).map((o) => (
+                          <span
+                            key={o.id}
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: techColorFor(o.assigned_technician_id) }}
+                          />
+                        ))}
+                        {dayOrders.length > 6 && (
+                          <span className="text-[9px] leading-none font-medium text-gray-400">
+                            +{dayOrders.length - 6}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-1 hidden space-y-1 sm:block">
                       {dayOrders.slice(0, 3).map((o) => {
                         const color = techColorFor(o.assigned_technician_id)
                         const isUnassigned = !o.assigned_technician_id
