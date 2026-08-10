@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, ChevronLeft, ChevronRight, Filter, Flag, ImageOff, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
-import { logAction } from '../../lib/audit'
-import { notifyAdmins, notifyTechnician } from '../../lib/notifications'
-import { useAuth } from '../../context/AuthContext'
 import { generatePages } from '../../lib/pagination'
 import { useDebounce } from '../../hooks/useDebounce'
 import type { CompletionAttachment, Order, ServiceCompletion, Technician } from '../../types'
-import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import StatusBadge from '../../components/StatusBadge'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
@@ -42,11 +39,10 @@ function isFlagged(order: ReviewOrder): boolean {
 }
 
 export default function ReviewQueue() {
-  const { session } = useAuth()
+  const navigate = useNavigate()
   const [allOrders, setAllOrders] = useState<ReviewOrder[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
-  const [busyId, setBusyId] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>('all')
@@ -126,98 +122,68 @@ export default function ReviewQueue() {
     return filteredOrders.slice(from, from + PAGE_SIZE)
   }, [filteredOrders, page])
 
-  async function advance(order: ReviewOrder, toStatus: 'Reviewed' | 'Closed') {
-    if (!session) return
-    setBusyId(order.id)
-    const { error } = await supabase.from('orders').update({ status: toStatus }).eq('id', order.id)
-    if (!error) {
-      await logAction({
-        orderId: order.id,
-        action: toStatus === 'Reviewed' ? 'Job reviewed' : 'Order closed',
-        actorRole: 'manager',
-        actorName: session.name,
-      })
-
-      if (toStatus === 'Reviewed' && order.technicians?.id) {
-        await notifyTechnician(order.technicians.id, {
-          title: 'Job reviewed',
-          body: `Your completed job ${order.order_no} has been reviewed by ${session.name}.`,
-          orderId: order.id,
-          link: '/technician/history',
-        })
-      } else if (toStatus === 'Closed') {
-        await notifyAdmins({
-          title: 'Order closed',
-          body: `${order.order_no} has been closed by ${session.name}.`,
-          orderId: order.id,
-          link: '/admin/orders',
-        })
-      }
-
-      await load()
-    }
-    setBusyId(null)
-  }
-
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[200px] flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search order no. or customer…"
-            className="h-9 pl-9 text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <Card className="relative overflow-hidden border border-sidebar-primary/20 bg-gradient-to-br from-sidebar-primary/10 via-sidebar-primary/5 to-white p-4 shadow-sm">
+        <div className="pointer-events-none absolute -top-12 -right-12 size-40 rounded-full bg-gradient-to-br from-sidebar-primary/20 to-sidebar/10 blur-2xl" />
+        <div className="relative flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search order no. or customer…"
+              className="h-9 border-gray-200 bg-white pl-9 text-sm"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v as ReviewStatusFilter)}
+          >
+            <SelectTrigger className="h-9 w-[150px] border-gray-200 bg-white text-sm">
+              <Filter className="size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="Job Done">Job Done</SelectItem>
+              <SelectItem value="Reviewed">Reviewed</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+            <SelectTrigger className="h-9 w-[150px] border-gray-200 bg-white text-sm">
+              <Filter className="size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="Technician" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All technicians</SelectItem>
+              {technicians.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangeFilter)}>
+            <SelectTrigger className="h-9 w-[150px] border-gray-200 bg-white text-sm">
+              <Filter className="size-3.5 text-muted-foreground" />
+              <SelectValue placeholder="Date range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any time</SelectItem>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+            </SelectContent>
+          </Select>
+          <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-gray-200 bg-white px-3 text-sm">
+            <Switch checked={flaggedOnly} onCheckedChange={setFlaggedOnly} />
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
+              <Flag className="size-3.5 text-amber-600" />
+              Flagged only
+            </span>
+          </label>
         </div>
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v as ReviewStatusFilter)}
-        >
-          <SelectTrigger className="h-9 w-[150px] text-sm">
-            <Filter className="size-3.5 text-muted-foreground" />
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="Job Done">Job Done</SelectItem>
-            <SelectItem value="Reviewed">Reviewed</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-          <SelectTrigger className="h-9 w-[150px] text-sm">
-            <Filter className="size-3.5 text-muted-foreground" />
-            <SelectValue placeholder="Technician" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All technicians</SelectItem>
-            {technicians.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRangeFilter)}>
-          <SelectTrigger className="h-9 w-[150px] text-sm">
-            <Filter className="size-3.5 text-muted-foreground" />
-            <SelectValue placeholder="Date range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any time</SelectItem>
-            <SelectItem value="7">Last 7 days</SelectItem>
-            <SelectItem value="30">Last 30 days</SelectItem>
-          </SelectContent>
-        </Select>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border px-3 text-sm">
-          <Switch checked={flaggedOnly} onCheckedChange={setFlaggedOnly} />
-          <span className="flex items-center gap-1.5 whitespace-nowrap">
-            <Flag className="size-3.5 text-amber-600" />
-            Flagged only
-          </span>
-        </label>
-      </div>
+      </Card>
 
       {loading ? (
         <div className="space-y-4">
@@ -239,9 +205,18 @@ export default function ReviewQueue() {
               const attachments = completion?.completion_attachments ?? []
               const overQuote =
                 completion && Number(completion.final_amount) > Number(order.quoted_price) * OVER_QUOTE_RATIO
+              const flagged = completion && (overQuote || attachments.length === 0)
 
               return (
-                <Card key={order.id}>
+                <Card
+                  key={order.id}
+                  className={`cursor-pointer border-l-4 shadow-sm transition-shadow hover:shadow-md ${
+                    flagged
+                      ? 'border-l-amber-400 bg-gradient-to-br from-amber-50/70 via-white to-white'
+                      : 'border-l-emerald-400 bg-gradient-to-br from-emerald-50/50 via-white to-white'
+                  }`}
+                  onClick={() => navigate(`/manager/review/${order.id}`)}
+                >
                   <CardHeader className="flex flex-row items-start justify-between space-y-0">
                     <div>
                       <CardTitle className="font-mono text-sm">{order.order_no}</CardTitle>
@@ -293,46 +268,10 @@ export default function ReviewQueue() {
                             </p>
                           </div>
                         </div>
-
-                        <p className="text-sm">
-                          <span className="font-medium text-muted-foreground">Work Done: </span>
-                          {completion.work_done}
-                        </p>
-                        {completion.remarks && (
-                          <p className="text-sm text-muted-foreground">
-                            <span className="font-medium">Remarks: </span>
-                            {completion.remarks}
-                          </p>
-                        )}
-                        <CompletionAttachmentsGallery
-                          attachments={attachments}
-                          receiptPhotoUrl={completion.receipt_photo_url}
-                        />
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground">No completion record found.</p>
                     )}
-
-                    <div className="flex gap-2">
-                      {order.status === 'Job Done' && (
-                        <Button
-                          onClick={() => advance(order, 'Reviewed')}
-                          disabled={busyId === order.id}
-                          className="bg-emerald-600 hover:bg-emerald-700"
-                        >
-                          Mark Reviewed
-                        </Button>
-                      )}
-                      {order.status === 'Reviewed' && (
-                        <Button
-                          onClick={() => advance(order, 'Closed')}
-                          disabled={busyId === order.id}
-                          variant="secondary"
-                        >
-                          Close Order
-                        </Button>
-                      )}
-                    </div>
                   </CardContent>
                 </Card>
               )

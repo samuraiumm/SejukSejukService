@@ -1,40 +1,32 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import {
+  AlertTriangle,
   ArrowLeft,
-  Ban,
   Banknote,
   CalendarCheck,
   CheckCircle2,
   Image as ImageIcon,
+  ImageOff,
   MapPin,
   MessageCircle,
-  Pencil,
   Phone,
   type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
-import { notifyTechnician } from '../../lib/notifications'
-import { getErrorMessage } from '../../lib/errors'
-import { canCancel } from '../../lib/orderStatus'
+import { notifyAdmins, notifyTechnician } from '../../lib/notifications'
 import { useAuth } from '../../context/AuthContext'
-import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
+import { buildWhatsAppLink } from '../../lib/whatsapp'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
-import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import StatusBadge from '../../components/StatusBadge'
+import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import WorkDoneDisplay from '../../components/WorkDoneDisplay'
+import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { Card } from '../../components/ui/card'
-import { Textarea } from '../../components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../components/ui/dialog'
+
+const OVER_QUOTE_RATIO = 1.3
 
 const AVATAR_COLORS = [
   'bg-blue-100 text-blue-700',
@@ -65,22 +57,18 @@ function getAvatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]
 }
 
-type OrderWithCompletion = Order & {
+type ReviewOrder = Order & {
   service_completions: (ServiceCompletion & { completion_attachments: CompletionAttachment[] })[]
 }
 
-export default function OrderDetail() {
+export default function ReviewDetail() {
   const { id } = useParams<{ id: string }>()
   const { session } = useAuth()
   const { setPageTitle } = useOutletContext<{ setPageTitle: (t: string) => void }>()
 
-  const [order, setOrder] = useState<OrderWithCompletion | null>(null)
+  const [order, setOrder] = useState<ReviewOrder | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const [cancelOpen, setCancelOpen] = useState(false)
-  const [cancelReason, setCancelReason] = useState('')
-  const [cancelling, setCancelling] = useState(false)
-  const [cancelError, setCancelError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -89,7 +77,7 @@ export default function OrderDetail() {
 
   useEffect(() => {
     if (order) {
-      setPageTitle(`Order ${order.order_no}`)
+      setPageTitle(`Review ${order.order_no}`)
     }
   }, [order, setPageTitle])
 
@@ -97,87 +85,82 @@ export default function OrderDetail() {
     setLoading(true)
     const { data } = await supabase
       .from('orders')
-      .select('*, technicians ( id, name, phone ), service_completions ( *, completion_attachments ( * ) )')
+      .select('*, technicians ( id, name ), service_completions ( *, completion_attachments ( * ) )')
       .eq('id', orderId)
       .single()
-    setOrder(data as unknown as OrderWithCompletion | null)
+    setOrder(data as unknown as ReviewOrder | null)
     setLoading(false)
   }
 
-  async function handleCancel() {
+  async function advance(toStatus: 'Reviewed' | 'Closed') {
     if (!order || !session) return
-    setCancelError(null)
-    setCancelling(true)
-    try {
-      const { error: cancelErr } = await supabase
-        .from('orders')
-        .update({
-          status: 'Cancelled',
-          admin_notes: `${order.admin_notes ? order.admin_notes + '\n\n' : ''}Cancelled: ${cancelReason}`,
-        })
-        .eq('id', order.id)
-      if (cancelErr) throw cancelErr
-
+    setBusy(true)
+    const { error } = await supabase.from('orders').update({ status: toStatus }).eq('id', order.id)
+    if (!error) {
       await logAction({
         orderId: order.id,
-        action: `Order cancelled: ${cancelReason}`,
-        actorRole: 'admin',
+        action: toStatus === 'Reviewed' ? 'Job reviewed' : 'Order closed',
+        actorRole: 'manager',
         actorName: session.name,
       })
 
-      if (order.assigned_technician_id) {
-        await notifyTechnician(order.assigned_technician_id, {
-          title: 'Job cancelled',
-          body: `${order.order_no} has been cancelled: ${cancelReason}`,
+      if (toStatus === 'Reviewed' && order.technicians?.id) {
+        await notifyTechnician(order.technicians.id, {
+          title: 'Job reviewed',
+          body: `Your completed job ${order.order_no} has been reviewed by ${session.name}.`,
           orderId: order.id,
-          link: '/technician/jobs',
+          link: '/technician/history',
+        })
+      } else if (toStatus === 'Closed') {
+        await notifyAdmins({
+          title: 'Order closed',
+          body: `${order.order_no} has been closed by ${session.name}.`,
+          orderId: order.id,
+          link: '/admin/orders',
         })
       }
 
-      setCancelOpen(false)
-      setCancelReason('')
       await load(order.id)
-    } catch (err) {
-      setCancelError(getErrorMessage(err, 'Failed to cancel order'))
-    } finally {
-      setCancelling(false)
     }
+    setBusy(false)
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>
   if (!order) return <p className="text-sm text-destructive">Order not found.</p>
 
   const completion = order.service_completions?.[0]
+  const attachments = completion?.completion_attachments ?? []
+  const overQuote =
+    !!completion && Number(completion.final_amount) > Number(order.quoted_price) * OVER_QUOTE_RATIO
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-1">
       <div className="flex items-center gap-3">
         <Button variant="ghost" size="icon-sm" asChild>
-          <Link to="/admin/orders">
+          <Link to="/manager/review">
             <ArrowLeft />
           </Link>
         </Button>
         <div className="min-w-0 flex-1">
           <h1 className="font-mono text-lg font-semibold text-gray-900">{order.order_no}</h1>
-          <p className="text-xs text-gray-500">
-            Created{' '}
-            {new Date(order.created_at).toLocaleString(undefined, {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-              hour: 'numeric',
-              minute: '2-digit',
-            })}
-          </p>
+          <p className="text-xs text-gray-500">{order.service_type}</p>
         </div>
         <StatusBadge status={order.status} />
-        <Button asChild size="sm">
-          <Link to={`/admin/orders/${order.id}/edit`}>
-            <Pencil className="size-4" />
-            Edit
-          </Link>
-        </Button>
       </div>
+
+      {(overQuote || (completion && attachments.length === 0)) && (
+        <Alert variant={overQuote ? 'destructive' : 'warning'}>
+          {overQuote ? <AlertTriangle /> : <ImageOff />}
+          <AlertDescription className="text-sm font-medium">
+            {[
+              overQuote && 'Final amount much higher than quoted',
+              completion && attachments.length === 0 && 'Job done but no photos uploaded',
+            ]
+              .filter(Boolean)
+              .join('   ·   ')}
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
@@ -227,63 +210,33 @@ export default function OrderDetail() {
                 {order.service_type}
               </span>
             </DetailRow>
-            <DetailRow label="Quoted Price">
-              RM {Number(order.quoted_price).toFixed(2)}
-            </DetailRow>
-            <DetailRow label="Technician">{order.technicians?.name ?? 'Not assigned yet'}</DetailRow>
-            <DetailRow label="Scheduled For">
-              {order.scheduled_at
-                ? new Date(order.scheduled_at).toLocaleString(undefined, {
+            <DetailRow label="Quoted Price">RM {Number(order.quoted_price).toFixed(2)}</DetailRow>
+            <DetailRow label="Technician">{order.technicians?.name ?? '—'}</DetailRow>
+            <DetailRow label="Completed">
+              {completion
+                ? new Date(completion.completed_at).toLocaleString(undefined, {
                     month: 'short',
                     day: 'numeric',
                     year: 'numeric',
                     hour: 'numeric',
                     minute: '2-digit',
                   })
-                : 'No date set yet'}
+                : '—'}
             </DetailRow>
           </div>
         </Card>
       </div>
 
-      <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-1.5">
-        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-          Problem Description
-        </h2>
-        <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.problem_description}</p>
-      </Card>
-
-      {order.admin_notes && (
+      {order.problem_description && (
         <Card className="rounded-xl border border-gray-200 shadow-sm p-4 space-y-1.5">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            Admin Notes
+            Problem Description
           </h2>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.admin_notes}</p>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{order.problem_description}</p>
         </Card>
       )}
 
-      {order.technicians?.phone && (
-        <a
-          href={buildWhatsAppLink(
-            order.technicians.phone,
-            buildJobAssignedMessage({
-              technicianName: order.technicians.name,
-              orderNo: order.order_no,
-              customerName: order.customer_name,
-              address: order.address,
-              serviceType: order.service_type,
-              scheduledAt: order.scheduled_at ? new Date(order.scheduled_at).toLocaleString() : null,
-            }),
-          )}
-          target="_blank"
-          rel="noreferrer"
-          className="block w-full rounded-lg bg-emerald-600 py-2.5 text-center text-sm font-medium text-white hover:bg-emerald-700"
-        >
-          Message {order.technicians.name} via WhatsApp
-        </a>
-      )}
-
-      {completion && (
+      {completion ? (
         <Card className="rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50/60 px-4 py-3">
             <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
@@ -293,21 +246,25 @@ export default function OrderDetail() {
           </div>
           <div className="space-y-4 p-4">
             <WorkDoneDisplay workDone={completion.work_done} className="font-medium text-gray-900" />
+
             {completion.remarks && (
               <div className="border-l-2 border-gray-200 pl-3">
                 <p className="text-sm italic text-gray-500">&ldquo;{completion.remarks}&rdquo;</p>
               </div>
             )}
+
             <div className="grid grid-cols-3 gap-3">
               <StatChip
                 icon={Banknote}
                 label="Amount Charged"
                 value={`RM ${Number(completion.final_amount).toFixed(2)}`}
+                warn={overQuote}
               />
               <StatChip
                 icon={ImageIcon}
                 label="Photos"
-                value={String(completion.completion_attachments?.length ?? 0)}
+                value={String(attachments.length)}
+                warn={attachments.length === 0}
               />
               <StatChip
                 icon={CalendarCheck}
@@ -320,56 +277,47 @@ export default function OrderDetail() {
                 })}
               />
             </div>
+
             <CompletionAttachmentsGallery
-              attachments={completion.completion_attachments}
+              attachments={attachments}
               receiptPhotoUrl={completion.receipt_photo_url}
             />
           </div>
         </Card>
-      )}
-
-      {canCancel(order.status) && (
-        <Card className="rounded-xl border border-destructive/30 shadow-sm p-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-gray-900">Cancel this order</p>
-            <p className="text-sm text-gray-500">
-              You can only cancel before a technician starts the job.
-            </p>
-          </div>
-          <Button variant="destructive" onClick={() => setCancelOpen(true)}>
-            <Ban />
-            Cancel Order
-          </Button>
+      ) : (
+        <Card className="rounded-xl border border-gray-200 shadow-sm p-4 text-sm text-muted-foreground">
+          No completion record found.
         </Card>
       )}
 
-      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel order {order.order_no}?</DialogTitle>
-            <DialogDescription>
-              This can't be undone. Please tell us why — it will be saved with this order
-              so anyone can see the reason later.
-            </DialogDescription>
-          </DialogHeader>
-          <Textarea
-            required
-            placeholder="Why is this order being cancelled?"
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-          />
-          {cancelError && <p className="text-sm text-destructive">{cancelError}</p>}
-          <DialogFooter>
+      {(order.status === 'Job Done' || order.status === 'Reviewed') && (
+        <Card className="rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-sm p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-gray-900">
+              {order.status === 'Job Done' ? 'Ready for review' : 'Ready to close'}
+            </p>
+            <p className="text-sm text-gray-500">
+              {order.status === 'Job Done'
+                ? 'Confirm this completed job looks good before it moves on.'
+                : 'This order has been reviewed — close it out once you\'re done.'}
+            </p>
+          </div>
+          {order.status === 'Job Done' && (
             <Button
-              variant="destructive"
-              disabled={cancelling || !cancelReason.trim()}
-              onClick={handleCancel}
+              onClick={() => advance('Reviewed')}
+              disabled={busy}
+              className="shrink-0 bg-emerald-600 hover:bg-emerald-700"
             >
-              {cancelling ? 'Cancelling…' : 'Yes, Cancel This Order'}
+              {busy ? 'Saving…' : 'Mark Reviewed'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          )}
+          {order.status === 'Reviewed' && (
+            <Button onClick={() => advance('Closed')} disabled={busy} variant="secondary" className="shrink-0">
+              {busy ? 'Saving…' : 'Close Order'}
+            </Button>
+          )}
+        </Card>
+      )}
     </div>
   )
 }
@@ -383,14 +331,26 @@ function DetailRow({ label, children }: { label: string; children: ReactNode }) 
   )
 }
 
-function StatChip({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function StatChip({
+  icon: Icon,
+  label,
+  value,
+  warn,
+}: {
+  icon: LucideIcon
+  label: string
+  value: string
+  warn?: boolean
+}) {
   return (
-    <div className="rounded-lg bg-gray-50 p-3">
-      <div className="flex items-center gap-1.5 text-gray-400">
+    <div className={`rounded-lg p-3 ${warn ? 'bg-amber-50' : 'bg-gray-50'}`}>
+      <div className={`flex items-center gap-1.5 ${warn ? 'text-amber-500' : 'text-gray-400'}`}>
         <Icon className="size-3.5" />
         <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
       </div>
-      <p className="mt-1 truncate text-sm font-semibold text-gray-900">{value}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${warn ? 'text-amber-700' : 'text-gray-900'}`}>
+        {value}
+      </p>
     </div>
   )
 }

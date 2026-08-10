@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowUp, Bot, Sparkles } from 'lucide-react'
+import { ArrowUp, Bot, Info, Sparkles } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
@@ -16,6 +16,11 @@ const EXAMPLES = [
   'How many jobs were completed today?',
   'Which technician might be overloaded this week?',
 ]
+
+const SCOPE_NOTE =
+  "This assistant only answers 4 kinds of questions: jobs completed in a period (today / this week / last week), " +
+  'which technician completed the most jobs, which technician might be overloaded, or what a named technician completed. ' +
+  "Other questions — pricing, customer details, scheduling changes, etc. — won't be understood."
 
 function ThinkingBubble() {
   return (
@@ -129,6 +134,11 @@ export default function AiQuery() {
             ))}
           </div>
 
+          <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+            <Info className="mt-0.5 size-3.5 shrink-0" />
+            <p>{SCOPE_NOTE}</p>
+          </div>
+
           {error && <p className="text-center text-sm text-destructive">{error}</p>}
         </div>
       </div>
@@ -164,7 +174,26 @@ export default function AiQuery() {
         <div ref={bottomRef} />
       </div>
 
-      <div className={cn('sticky bottom-4 z-10')}>{composer}</div>
+      <div className={cn('sticky bottom-4 z-10 space-y-2 bg-background pt-2')}>
+        <div className="flex flex-wrap justify-center gap-1.5">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              type="button"
+              onClick={() => void ask(ex)}
+              disabled={loading}
+              className="rounded-full border bg-card px-2.5 py-1 text-[11px] font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+        {composer}
+        <div className="flex items-start justify-center gap-1.5 px-2 text-center text-[11px] text-muted-foreground">
+          <Info className="mt-0.5 size-3 shrink-0" />
+          <p>{SCOPE_NOTE}</p>
+        </div>
+      </div>
     </div>
   )
 }

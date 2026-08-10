@@ -13,6 +13,7 @@ import { supabase } from '../../lib/supabaseClient'
 import { useAuth } from '../../context/AuthContext'
 import type { Order, ServiceCompletion, CompletionAttachment } from '../../types'
 import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
+import WorkDoneDisplay from '../../components/WorkDoneDisplay'
 import { Card, CardContent } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Skeleton } from '../../components/ui/skeleton'
@@ -382,7 +383,7 @@ function EntryDetails({ entry }: { entry: HistoryEntry }) {
     <div className="space-y-4 pt-4">
       <div className="space-y-1">
         <p className="text-xs font-medium text-muted-foreground">Work Done</p>
-        <p className="whitespace-pre-wrap text-sm">{entry.work_done}</p>
+        <WorkDoneDisplay workDone={entry.work_done} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">

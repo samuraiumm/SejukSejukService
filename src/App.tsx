@@ -17,6 +17,7 @@ import JobComplete from './pages/technician/JobComplete'
 import JobHistory from './pages/technician/JobHistory'
 import TechnicianDashboard from './pages/technician/Dashboard'
 import ReviewQueue from './pages/manager/ReviewQueue'
+import ReviewDetail from './pages/manager/ReviewDetail'
 import Dashboard from './pages/manager/Dashboard'
 import AiQuery from './pages/manager/AiQuery'
 
@@ -106,6 +107,14 @@ function App() {
           element={
             <RequireRole role="manager">
               <ReviewQueue />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/manager/review/:id"
+          element={
+            <RequireRole role="manager">
+              <ReviewDetail />
             </RequireRole>
           }
         />

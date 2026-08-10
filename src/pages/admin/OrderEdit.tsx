@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useOutletContext, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
 import { notifyTechnician } from '../../lib/notifications'
@@ -9,8 +9,9 @@ import { useAuth } from '../../context/AuthContext'
 import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
 import { SERVICE_TYPES, type Order, type Technician } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
-import { Card, CardContent } from '../../components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
@@ -22,12 +23,32 @@ import {
   SelectValue,
 } from '../../components/ui/select'
 
+/** Light filled-field look, matching the New Order page's style. */
+const fieldClass =
+  'rounded-lg border-0 bg-gray-50 shadow-none focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-teal-500/40'
+
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
+
+function formFromOrder(o: Order) {
+  return {
+    customer_name: o.customer_name,
+    phone: o.phone,
+    address: o.address,
+    problem_description: o.problem_description,
+    service_type: o.service_type,
+    quoted_price: String(o.quoted_price),
+    admin_notes: o.admin_notes ?? '',
+    assigned_technician_id: o.assigned_technician_id ?? '',
+    scheduled_at: toDatetimeLocal(o.scheduled_at),
+  }
+}
+
+type OrderForm = ReturnType<typeof formFromOrder>
 
 export default function OrderEdit() {
   const { id } = useParams<{ id: string }>()
@@ -38,18 +59,8 @@ export default function OrderEdit() {
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [form, setForm] = useState({
-    customer_name: '',
-    phone: '',
-    address: '',
-    problem_description: '',
-    service_type: SERVICE_TYPES[0] as string,
-    quoted_price: '',
-    admin_notes: '',
-    assigned_technician_id: '',
-    scheduled_at: '',
-  })
-  const [originalScheduledAt, setOriginalScheduledAt] = useState('')
+  const [form, setForm] = useState<OrderForm | null>(null)
+  const [initialForm, setInitialForm] = useState<OrderForm | null>(null)
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -81,36 +92,34 @@ export default function OrderEdit() {
     const o = data as unknown as Order | null
     setOrder(o)
     if (o) {
-      const schedLocal = toDatetimeLocal(o.scheduled_at)
-      setForm({
-        customer_name: o.customer_name,
-        phone: o.phone,
-        address: o.address,
-        problem_description: o.problem_description,
-        service_type: o.service_type,
-        quoted_price: String(o.quoted_price),
-        admin_notes: o.admin_notes ?? '',
-        assigned_technician_id: o.assigned_technician_id ?? '',
-        scheduled_at: schedLocal,
-      })
-      setOriginalScheduledAt(schedLocal)
+      const next = formFromOrder(o)
+      setForm(next)
+      setInitialForm(next)
     }
     setLoading(false)
   }
 
-  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    setForm((f) => ({ ...f, [key]: value }))
+  function update<K extends keyof OrderForm>(key: K, value: OrderForm[K]) {
+    setForm((f) => (f ? { ...f, [key]: value } : f))
   }
+
+  function discardChanges() {
+    setForm(initialForm)
+    setRescheduleReason('')
+    setError(null)
+  }
+
+  const isDirty = form && initialForm ? JSON.stringify(form) !== JSON.stringify(initialForm) : false
 
   // A "reschedule" is changing an *already-set* date — setting the first
   // schedule on a previously-unscheduled order is just a normal edit, not
   // something that should count toward the reschedule metric.
-  const scheduleChanged = form.scheduled_at !== originalScheduledAt
-  const isReschedule = scheduleChanged && originalScheduledAt !== ''
+  const scheduleChanged = form && initialForm ? form.scheduled_at !== initialForm.scheduled_at : false
+  const isReschedule = scheduleChanged && initialForm?.scheduled_at !== ''
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!order || !session) return
+    if (!order || !session || !form) return
     setError(null)
     setSaving(true)
     try {
@@ -181,153 +190,238 @@ export default function OrderEdit() {
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>
-  if (!order) return <p className="text-sm text-destructive">Order not found.</p>
+  if (!order || !form) return <p className="text-sm text-destructive">Order not found.</p>
 
   return (
-    <div className="mx-auto max-w-2xl space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon-sm" asChild>
-          <Link to={`/admin/orders/${order.id}`}>
-            <ArrowLeft />
-          </Link>
-        </Button>
-        <div className="flex-1" />
-        <StatusBadge status={order.status} />
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon-sm" asChild>
+            <Link to={`/admin/orders/${order.id}`}>
+              <ArrowLeft />
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Edit {order.order_no}</h1>
+            <p className="mt-1 text-sm text-gray-500">Update job details, scheduling, and assignment.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <StatusBadge status={order.status} />
+          {isDirty && (
+            <span className="flex items-center gap-1.5 text-sm text-amber-600">
+              <span className="size-1.5 rounded-full bg-amber-500" />
+              Unsaved changes
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={discardChanges}
+            disabled={!isDirty || saving}
+            className="border-gray-200 text-gray-600"
+          >
+            Discard
+          </Button>
+          <Button
+            type="submit"
+            form="edit-order-form"
+            disabled={saving}
+            className="bg-teal-600 text-white hover:bg-teal-700"
+          >
+            {saving ? 'Saving…' : 'Save Changes'}
+          </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Customer Name" required>
-                <Input
+      {error && (
+        <Alert variant="destructive">
+          <AlertTriangle />
+          <AlertTitle>Couldn't save changes</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {saved && (
+        <Alert variant="success">
+          <CheckCircle2 />
+          <AlertTitle>Changes saved</AlertTitle>
+          <AlertDescription>
+            <Link to={`/admin/orders/${order.id}`} className="underline">
+              Back to order
+            </Link>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <form id="edit-order-form" onSubmit={handleSubmit} className="grid gap-5 lg:grid-cols-3">
+        <div className="space-y-5 lg:col-span-2">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">
+                Customer Information
+              </CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Who this order is for.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Customer Name" required>
+                  <Input
+                    required
+                    className={fieldClass}
+                    value={form.customer_name}
+                    onChange={(e) => update('customer_name', e.target.value)}
+                  />
+                </Field>
+                <Field label="Phone" required>
+                  <Input
+                    required
+                    type="tel"
+                    className={fieldClass}
+                    value={form.phone}
+                    onChange={(e) => update('phone', e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Field label="Address" required>
+                <Textarea
                   required
-                  value={form.customer_name}
-                  onChange={(e) => update('customer_name', e.target.value)}
+                  rows={2}
+                  className={fieldClass}
+                  value={form.address}
+                  onChange={(e) => update('address', e.target.value)}
                 />
               </Field>
-              <Field label="Phone" required>
-                <Input
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">Job Details</CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                What needs to be done, and the price quoted to the customer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Field label="Problem Description" required>
+                <Textarea
                   required
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => update('phone', e.target.value)}
+                  rows={3}
+                  className={fieldClass}
+                  value={form.problem_description}
+                  onChange={(e) => update('problem_description', e.target.value)}
                 />
               </Field>
-            </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Service Type" required>
+                  <Select
+                    value={form.service_type}
+                    onValueChange={(value) => update('service_type', value)}
+                  >
+                    <SelectTrigger className={`w-full ${fieldClass}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERVICE_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Quoted Price (RM)" required>
+                  <Input
+                    required
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className={fieldClass}
+                    value={form.quoted_price}
+                    onChange={(e) => update('quoted_price', e.target.value)}
+                  />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            <Field label="Address" required>
-              <Textarea
-                required
-                rows={2}
-                value={form.address}
-                onChange={(e) => update('address', e.target.value)}
-              />
-            </Field>
-
-            <Field label="Problem Description" required>
-              <Textarea
-                required
-                rows={3}
-                value={form.problem_description}
-                onChange={(e) => update('problem_description', e.target.value)}
-              />
-            </Field>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Service Type" required>
+        <div className="space-y-5">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">
+                Assignment &amp; Schedule
+              </CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Who's doing the job, and when.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Field label="Assigned Technician">
                 <Select
-                  value={form.service_type}
-                  onValueChange={(value) => update('service_type', value)}
+                  value={form.assigned_technician_id || 'unassigned'}
+                  onValueChange={(value) =>
+                    update('assigned_technician_id', value === 'unassigned' ? '' : value)
+                  }
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger className={`w-full ${fieldClass}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {SERVICE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>
-                        {t}
+                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                    {technicians.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                        {!t.active ? ' (inactive)' : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Quoted Price (RM)" required>
+
+              <Field label="Scheduled For">
                 <Input
-                  required
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.quoted_price}
-                  onChange={(e) => update('quoted_price', e.target.value)}
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={form.scheduled_at}
+                  onChange={(e) => update('scheduled_at', e.target.value)}
                 />
               </Field>
-            </div>
 
-            <Field label="Assigned Technician">
-              <Select
-                value={form.assigned_technician_id || 'unassigned'}
-                onValueChange={(value) =>
-                  update('assigned_technician_id', value === 'unassigned' ? '' : value)
-                }
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Unassigned</SelectItem>
-                  {technicians.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.name}
-                      {!t.active ? ' (inactive)' : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+              {isReschedule && (
+                <Field label="Reason for reschedule">
+                  <Input
+                    placeholder="e.g. customer requested a later time"
+                    className={fieldClass}
+                    value={rescheduleReason}
+                    onChange={(e) => setRescheduleReason(e.target.value)}
+                  />
+                </Field>
+              )}
+            </CardContent>
+          </Card>
 
-            <Field label="Scheduled For">
-              <Input
-                type="datetime-local"
-                value={form.scheduled_at}
-                onChange={(e) => update('scheduled_at', e.target.value)}
-              />
-            </Field>
-
-            {isReschedule && (
-              <Field label="Reason for reschedule">
-                <Input
-                  placeholder="e.g. customer requested a later time"
-                  value={rescheduleReason}
-                  onChange={(e) => setRescheduleReason(e.target.value)}
-                />
-              </Field>
-            )}
-
-            <Field label="Admin Notes">
+          <Card className="rounded-xl border border-gray-100 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold text-gray-900">Notes</CardTitle>
+              <CardDescription className="text-xs text-gray-400">
+                Internal notes for your team — not shared with the customer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
               <Textarea
-                rows={2}
+                rows={5}
+                placeholder="Type…"
+                className={fieldClass}
                 value={form.admin_notes}
                 onChange={(e) => update('admin_notes', e.target.value)}
               />
-            </Field>
-
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            {saved && (
-              <p className="text-sm text-emerald-600">
-                Saved.{' '}
-                <Link to={`/admin/orders/${order.id}`} className="underline">
-                  Back to order
-                </Link>
-              </p>
-            )}
-
-            <Button type="submit" disabled={saving} className="w-full">
-              {saving ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+      </form>
 
       {saved && order.technicians?.phone && (
         <a
@@ -366,7 +460,7 @@ function Field({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label>
+      <Label className="text-gray-700">
         {label} {required && <span className="text-destructive">*</span>}
       </Label>
       {children}
