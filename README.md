@@ -29,18 +29,18 @@ All modules from the assessment were implemented:
   `wa.me` pattern is reused on the Admin side to notify the assigned technician when an
   order is created or (re)assigned to them, and on the Technician side (Module 2 bonus:
   "Notify manager/accounts when job completed") to notify each manager who has a phone
-  number on file — that message includes the same over-quote/no-photos flags as the AI
+  number on file — that message includes the same over-quote/no-photos flags as the
   Workflow Supervisor, so a manager sees on WhatsApp itself whether a job needs a closer
   look before opening the app.
 - **Manager Review Queue**: review `Job Done` orders and close them, with inline
-  **AI Workflow Supervisor** flags (final amount much higher than quoted; job done with
-  no photos uploaded).
+  **Workflow Supervisor** flags (rule-based: final amount much higher than quoted; job
+  done with no photos uploaded).
 - **Real authentication (bonus)**: Supabase Auth (email/password) instead of a mock role
   switch, with role-scoped Row Level Security enforced in Postgres, not just the UI.
 - **Bonus — KPI Dashboard**: jobs completed, total amount, and a leaderboard/chart per
   technician (including a Postpone/Reschedule count), with a 7/30-day range toggle in
   the Manager view — which is also the Manager's post-login landing page, and leads
-  with "Awaiting Review" and "Flagged" counts (jobs matching the AI Workflow Supervisor
+  with "Awaiting Review" and "Flagged" counts (jobs matching the Workflow Supervisor
   rules) linking straight to the Review Queue, so anything needing attention is visible
   before drilling into performance stats. The Admin view has its own operational
   dashboard: order-status breakdown, technician workload, revenue trend, and upcoming
@@ -320,19 +320,16 @@ auto-detected as a serverless function; `vercel.json` rewrites all non-`/api` pa
 
 ## Self-Assessment
 
-- **Easiest module**: Module 1 (Admin Portal) — a standard form-to-database flow with
-  no unusual constraints.
-- **Hardest part**: keeping the AI module's data access genuinely constrained rather
-  than just prompting an LLM to "be careful" — the design that made this straightforward
-  was moving query *selection* out of the LLM entirely (regex classification →
-  parameterized query → LLM only formats already-retrieved rows).
-- **What I'd improve for production**: a proper state machine enforced in Postgres (or
-  at least a DB trigger) for status *sequencing*, instead of only in the client — RLS
-  now covers *who* can write, but not *which transition*; per-attachment storage
-  scoping instead of "any signed-in user"; a self-serve (but admin-approved) way to add
-  technicians instead of a manual seed script; and replacing the regex-based AI query
-  classifier with a small tool-calling setup (LLM picks from a fixed set of typed query
-  functions) so more question phrasings are understood without expanding the regex list
-  by hand.
+- **Easiest module**: Module 1 (Admin Portal). It's a straightforward form-to-database
+  flow, nothing tricky about it.
+- **Hardest part**: making sure the AI module couldn't just go and query whatever it
+  wanted. Instead of trusting the LLM to "be careful", I took query selection out of its
+  hands completely — a regex classifies the question, a parameterized query fetches the
+  data, and the LLM's only job is to format rows that were already retrieved.
+- **What I'd improve for production**: add a customer-facing ordering flow, similar to
+  how Lalamove, ShopeeFood, or Foodpanda work, so customers can place their own service
+  requests instead of relying on admin staff to create every order manually. Alongside
+  that, I'd build a promo/discount section so admins can offer customers special pricing
+  during festive seasons or other occasions.
 - **AI tool usage while building**: built interactively with Claude Code, which wrote
   the schema, components, and serverless function from the assessment spec.

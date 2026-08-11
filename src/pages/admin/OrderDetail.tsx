@@ -19,7 +19,7 @@ import { notifyTechnician } from '../../lib/notifications'
 import { getErrorMessage } from '../../lib/errors'
 import { canCancel } from '../../lib/orderStatus'
 import { useAuth } from '../../context/AuthContext'
-import { buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
+import { buildCustomerContactMessage, buildJobAssignedMessage, buildWhatsAppLink } from '../../lib/whatsapp'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import StatusBadge from '../../components/StatusBadge'
@@ -206,7 +206,13 @@ export default function OrderDetail() {
             </Button>
             <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
               <a
-                href={buildWhatsAppLink(order.phone, `Hi ${order.customer_name}, regarding your order ${order.order_no}...`)}
+                href={buildWhatsAppLink(
+                  order.phone,
+                  buildCustomerContactMessage({
+                    customerName: order.customer_name,
+                    orderNo: order.order_no,
+                  }),
+                )}
                 target="_blank"
                 rel="noreferrer"
               >
