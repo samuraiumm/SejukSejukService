@@ -318,6 +318,21 @@ in the Vercel project's Environment Variables settings. `api/ai-query.ts` is
 auto-detected as a serverless function; `vercel.json` rewrites all non-`/api` paths to
 `index.html` for client-side routing.
 
+## Demo Accounts
+
+All accounts share the same password below, so a reviewer can log in as any role without
+provisioning anything. This is a fictional demo dataset for a take-home assessment, not a
+production system, so publishing test credentials here is safe.
+
+| Role | Name | Email | Password |
+|---|---|---|---|
+| Admin | Admin | `admin@sejuksejuk.local` | `password123` |
+| Manager | Helmi | `manager@sejuksejuk.local` | `password123` |
+| Technician | Ali | `ali@sejuksejuk.local` | `password123` |
+| Technician | John | `john@sejuksejuk.local` | `password123` |
+| Technician | Bala | `bala@sejuksejuk.local` | `password123` |
+| Technician | Yusoff | `yusoff@sejuksejuk.local` | `password123` |
+
 ## Self-Assessment
 
 - **Easiest module**: Module 1 (Admin Portal). It's a straightforward form-to-database
@@ -332,7 +347,11 @@ auto-detected as a serverless function; `vercel.json` rewrites all non-`/api` pa
   a parameterized Supabase query fetches exactly that data, and the LLM's only job is to
   phrase the already-retrieved rows into a natural-language sentence. It never sees a raw
   connection string and never writes its own filters — if a question doesn't match a
-  known type, the assistant says so directly instead of guessing at an answer.
+  known type, the assistant says so directly instead of guessing at an answer. This was
+  made harder by also being new to Supabase and Postgres going into this project — coming
+  from a Laravel/MySQL background, I had to pick up Postgres SQL syntax, Row Level
+  Security policies, and Supabase's client/server query patterns at the same time as
+  designing this safety layer, rather than relying on tools I already knew well.
 - **What I'd improve for production**: add a customer-facing ordering flow, similar to
   how Lalamove, ShopeeFood, or Foodpanda work, so customers can place their own service
   requests directly instead of relying on admin staff to manually key in every order.
