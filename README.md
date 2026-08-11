@@ -321,15 +321,30 @@ auto-detected as a serverless function; `vercel.json` rewrites all non-`/api` pa
 ## Self-Assessment
 
 - **Easiest module**: Module 1 (Admin Portal). It's a straightforward form-to-database
-  flow, nothing tricky about it.
+  flow — create an order, pick a technician from a dropdown, save. There's no async
+  coordination with other roles, no file uploads, and no business rules beyond basic
+  field validation, so it was the fastest piece to build and the least likely to break.
 - **Hardest part**: making sure the AI module couldn't just go and query whatever it
-  wanted. Instead of trusting the LLM to "be careful", I took query selection out of its
-  hands completely — a regex classifies the question, a parameterized query fetches the
-  data, and the LLM's only job is to format rows that were already retrieved.
+  wanted. Giving an LLM a live database connection and trusting it to "be careful" from a
+  prompt alone is risky — a badly-phrased question could end up as an unrestricted query
+  over real data. Instead, I took query selection out of the LLM's hands completely: a
+  regex classifies the incoming question into one of a fixed set of known question types,
+  a parameterized Supabase query fetches exactly that data, and the LLM's only job is to
+  phrase the already-retrieved rows into a natural-language sentence. It never sees a raw
+  connection string and never writes its own filters — if a question doesn't match a
+  known type, the assistant says so directly instead of guessing at an answer.
 - **What I'd improve for production**: add a customer-facing ordering flow, similar to
   how Lalamove, ShopeeFood, or Foodpanda work, so customers can place their own service
-  requests instead of relying on admin staff to create every order manually. Alongside
-  that, I'd build a promo/discount section so admins can offer customers special pricing
-  during festive seasons or other occasions.
-- **AI tool usage while building**: built interactively with Claude Code, which wrote
-  the schema, components, and serverless function from the assessment spec.
+  requests directly instead of relying on admin staff to manually key in every order.
+  Alongside that, I'd build a promo/discount section so admins can offer customers special
+  pricing during festive seasons or other occasions — right now pricing is just a flat
+  quoted amount per job with no way to apply a campaign discount.
+- **AI tool usage while building**: built interactively with Claude Code, using a
+  planning-first workflow. I gave Claude the assessment spec and told it I needed to
+  deliver the full system within a 7-day timeline; Claude broke that down into a
+  day-by-day task plan covering the database schema, each module, and the bonus features.
+  I worked through that plan one day at a time, reviewing and testing each piece as it was
+  built rather than leaving everything to the end. Once every module was in place, I ran a
+  full round of User Acceptance Testing (UAT) — walking through each role's workflow
+  end-to-end as a real user would — to confirm there were no outstanding issues before
+  considering it complete.
