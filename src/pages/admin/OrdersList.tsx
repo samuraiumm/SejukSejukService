@@ -16,6 +16,7 @@ import {
   PlusCircle,
   Search,
   ShoppingBag,
+  XCircle,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import type { Order, OrderStatus, Technician } from '../../types'
@@ -345,7 +346,11 @@ export default function OrdersList() {
     },
     {
       label: 'In Progress',
-      value: (summary['Assigned'] ?? 0) + (summary['In Progress'] ?? 0),
+      value:
+        (summary['Assigned'] ?? 0) +
+        (summary['In Progress'] ?? 0) +
+        (summary['Job Done'] ?? 0) +
+        (summary['Reviewed'] ?? 0),
       icon: Layers,
       color: 'bg-amber-500',
       bgLight: 'bg-amber-50',
@@ -359,11 +364,19 @@ export default function OrdersList() {
       bgLight: 'bg-gray-50',
       textColor: 'text-gray-600',
     },
+    {
+      label: 'Cancelled',
+      value: summary['Cancelled'] ?? 0,
+      icon: XCircle,
+      color: 'bg-red-500',
+      bgLight: 'bg-red-50',
+      textColor: 'text-red-600',
+    },
   ]
 
   return (
     <div className="space-y-6 p-1">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {summaryCards.map((card) => {
           const total = summaryCards[0].value
           const pct = total > 0 ? Math.round((card.value / total) * 100) : 0

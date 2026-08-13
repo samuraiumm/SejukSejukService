@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { MOCK_TECHNICIANS } from '../src/types'
+import { MOCK_TECHNICIANS } from '../src/types/index.ts'
 
 export interface AiQueryResult {
   answer: string
