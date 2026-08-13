@@ -11,18 +11,22 @@ import {
   MapPin,
   MessageCircle,
   Phone,
+  ShieldAlert,
   type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { logAction } from '../../lib/audit'
 import { notifyAdmins, notifyTechnician } from '../../lib/notifications'
 import { useAuth } from '../../context/AuthContext'
-import { buildWhatsAppLink } from '../../lib/whatsapp'
+import {
+  buildCustomerContactMessage,
+  buildTechnicianContactMessage,
+  buildWhatsAppLink,
+} from '../../lib/whatsapp'
 import type { CompletionAttachment, Order, ServiceCompletion } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
 import CompletionAttachmentsGallery from '../../components/CompletionAttachmentsGallery'
 import WorkDoneDisplay from '../../components/WorkDoneDisplay'
-import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { Card } from '../../components/ui/card'
 
@@ -85,7 +89,7 @@ export default function ReviewDetail() {
     setLoading(true)
     const { data } = await supabase
       .from('orders')
-      .select('*, technicians ( id, name ), service_completions ( *, completion_attachments ( * ) )')
+      .select('*, technicians ( id, name, phone ), service_completions ( *, completion_attachments ( * ) )')
       .eq('id', orderId)
       .single()
     setOrder(data as unknown as ReviewOrder | null)
@@ -149,17 +153,36 @@ export default function ReviewDetail() {
       </div>
 
       {(overQuote || (completion && attachments.length === 0)) && (
-        <Alert variant={overQuote ? 'destructive' : 'warning'}>
-          {overQuote ? <AlertTriangle /> : <ImageOff />}
-          <AlertDescription className="text-sm font-medium">
-            {[
-              overQuote && 'Final amount much higher than quoted',
-              completion && attachments.length === 0 && 'Job done but no photos uploaded',
-            ]
-              .filter(Boolean)
-              .join('   ·   ')}
-          </AlertDescription>
-        </Alert>
+        <div className="relative overflow-hidden rounded-xl border border-violet-200 bg-gradient-to-br from-violet-50 via-violet-50/40 to-white p-4 shadow-sm">
+          <div className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full bg-gradient-to-br from-violet-300/30 to-transparent blur-2xl" />
+          <div className="relative flex items-start gap-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white shadow-sm">
+              <ShieldAlert className="size-4" />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-violet-700">
+                Workflow Supervisor
+                <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-600">
+                  auto-detected
+                </span>
+              </p>
+              <div className="space-y-1">
+                {overQuote && (
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                    <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
+                    Final amount much higher than quoted
+                  </p>
+                )}
+                {completion && attachments.length === 0 && (
+                  <p className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                    <ImageOff className="size-3.5 shrink-0 text-amber-500" />
+                    Job done but no photos uploaded
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -189,7 +212,13 @@ export default function ReviewDetail() {
             </Button>
             <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
               <a
-                href={buildWhatsAppLink(order.phone, `Hi ${order.customer_name}, regarding your order ${order.order_no}...`)}
+                href={buildWhatsAppLink(
+                  order.phone,
+                  buildCustomerContactMessage({
+                    customerName: order.customer_name,
+                    orderNo: order.order_no,
+                  }),
+                )}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -212,6 +241,33 @@ export default function ReviewDetail() {
             </DetailRow>
             <DetailRow label="Quoted Price">RM {Number(order.quoted_price).toFixed(2)}</DetailRow>
             <DetailRow label="Technician">{order.technicians?.name ?? '—'}</DetailRow>
+            {order.technicians?.phone && (
+              <div className="flex gap-2 py-2">
+                <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
+                  <a href={`tel:${order.technicians.phone}`}>
+                    <Phone className="size-3.5" />
+                    Call
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1 border-gray-200" asChild>
+                  <a
+                    href={buildWhatsAppLink(
+                      order.technicians.phone,
+                      buildTechnicianContactMessage({
+                        technicianName: order.technicians.name,
+                        orderNo: order.order_no,
+                        customerName: order.customer_name,
+                      }),
+                    )}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <MessageCircle className="size-3.5" />
+                    WhatsApp
+                  </a>
+                </Button>
+              </div>
+            )}
             <DetailRow label="Completed">
               {completion
                 ? new Date(completion.completed_at).toLocaleString(undefined, {

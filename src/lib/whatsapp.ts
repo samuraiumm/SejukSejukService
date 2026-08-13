@@ -33,6 +33,23 @@ export function buildJobCompletedManagerMessage(params: {
   return `Hi ${managerName},\nJob ${orderNo} for ${customerName} has been completed by ${technicianName}. Final amount: RM ${finalAmount.toFixed(2)}.${flagLine}\nPlease review in the app when you can.`
 }
 
+export function buildCustomerContactMessage(params: {
+  customerName: string
+  orderNo: string
+}): string {
+  const { customerName, orderNo } = params
+  return `Hi ${customerName},\nThis is regarding your order ${orderNo}.\nPlease let us know if you have any questions.\nThank you!`
+}
+
+export function buildTechnicianContactMessage(params: {
+  technicianName: string
+  orderNo: string
+  customerName: string
+}): string {
+  const { technicianName, orderNo, customerName } = params
+  return `Hi ${technicianName},\nThis is regarding job ${orderNo} for ${customerName}.\nPlease let us know if you have any questions.\nThank you!`
+}
+
 export function buildJobAssignedMessage(params: {
   technicianName: string
   orderNo: string

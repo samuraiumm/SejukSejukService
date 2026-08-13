@@ -9,7 +9,6 @@ import {
   LogOut,
   PlusCircle,
   Users,
-  Wind,
 } from 'lucide-react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -77,8 +76,20 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Wind className="size-4" />
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <svg viewBox="0 0 512 512" className="size-4" aria-hidden="true">
+                  <g transform="translate(256,256)" fill="currentColor">
+                    <path d="M0,-14 C40,-70 60,-120 40,-166 C74,-140 92,-92 78,-40 C68,-4 34,-6 0,-14 Z" />
+                    <path
+                      d="M0,-14 C40,-70 60,-120 40,-166 C74,-140 92,-92 78,-40 C68,-4 34,-6 0,-14 Z"
+                      transform="rotate(120)"
+                    />
+                    <path
+                      d="M0,-14 C40,-70 60,-120 40,-166 C74,-140 92,-92 78,-40 C68,-4 34,-6 0,-14 Z"
+                      transform="rotate(240)"
+                    />
+                  </g>
+                </svg>
               </div>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold">Sejuk Sejuk Service</span>

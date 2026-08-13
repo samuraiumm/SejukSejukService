@@ -29,18 +29,18 @@ All modules from the assessment were implemented:
   `wa.me` pattern is reused on the Admin side to notify the assigned technician when an
   order is created or (re)assigned to them, and on the Technician side (Module 2 bonus:
   "Notify manager/accounts when job completed") to notify each manager who has a phone
-  number on file — that message includes the same over-quote/no-photos flags as the AI
+  number on file — that message includes the same over-quote/no-photos flags as the
   Workflow Supervisor, so a manager sees on WhatsApp itself whether a job needs a closer
   look before opening the app.
 - **Manager Review Queue**: review `Job Done` orders and close them, with inline
-  **AI Workflow Supervisor** flags (final amount much higher than quoted; job done with
-  no photos uploaded).
+  **Workflow Supervisor** flags (rule-based: final amount much higher than quoted; job
+  done with no photos uploaded).
 - **Real authentication (bonus)**: Supabase Auth (email/password) instead of a mock role
   switch, with role-scoped Row Level Security enforced in Postgres, not just the UI.
 - **Bonus — KPI Dashboard**: jobs completed, total amount, and a leaderboard/chart per
   technician (including a Postpone/Reschedule count), with a 7/30-day range toggle in
   the Manager view — which is also the Manager's post-login landing page, and leads
-  with "Awaiting Review" and "Flagged" counts (jobs matching the AI Workflow Supervisor
+  with "Awaiting Review" and "Flagged" counts (jobs matching the Workflow Supervisor
   rules) linking straight to the Review Queue, so anything needing attention is visible
   before drilling into performance stats. The Admin view has its own operational
   dashboard: order-status breakdown, technician workload, revenue trend, and upcoming
@@ -318,21 +318,52 @@ in the Vercel project's Environment Variables settings. `api/ai-query.ts` is
 auto-detected as a serverless function; `vercel.json` rewrites all non-`/api` paths to
 `index.html` for client-side routing.
 
+## Demo Accounts
+
+All accounts share the same password below, so a reviewer can log in as any role without
+provisioning anything. This is a fictional demo dataset for a take-home assessment, not a
+production system, so publishing test credentials here is safe.
+
+| Role | Name | Email | Password |
+|---|---|---|---|
+| Admin | Admin | `admin@sejuksejuk.local` | `password123` |
+| Manager | Helmi | `manager@sejuksejuk.local` | `password123` |
+| Technician | Ali | `ali@sejuksejuk.local` | `password123` |
+| Technician | John | `john@sejuksejuk.local` | `password123` |
+| Technician | Bala | `bala@sejuksejuk.local` | `password123` |
+| Technician | Yusoff | `yusoff@sejuksejuk.local` | `password123` |
+
 ## Self-Assessment
 
-- **Easiest module**: Module 1 (Admin Portal) — a standard form-to-database flow with
-  no unusual constraints.
-- **Hardest part**: keeping the AI module's data access genuinely constrained rather
-  than just prompting an LLM to "be careful" — the design that made this straightforward
-  was moving query *selection* out of the LLM entirely (regex classification →
-  parameterized query → LLM only formats already-retrieved rows).
-- **What I'd improve for production**: a proper state machine enforced in Postgres (or
-  at least a DB trigger) for status *sequencing*, instead of only in the client — RLS
-  now covers *who* can write, but not *which transition*; per-attachment storage
-  scoping instead of "any signed-in user"; a self-serve (but admin-approved) way to add
-  technicians instead of a manual seed script; and replacing the regex-based AI query
-  classifier with a small tool-calling setup (LLM picks from a fixed set of typed query
-  functions) so more question phrasings are understood without expanding the regex list
-  by hand.
-- **AI tool usage while building**: built interactively with Claude Code, which wrote
-  the schema, components, and serverless function from the assessment spec.
+- **Easiest module**: Module 1 (Admin Portal). It's a straightforward form-to-database
+  flow — create an order, pick a technician from a dropdown, save. There's no async
+  coordination with other roles, no file uploads, and no business rules beyond basic
+  field validation, so it was the fastest piece to build and the least likely to break.
+- **Hardest part**: making sure the AI module couldn't just go and query whatever it
+  wanted. Giving an LLM a live database connection and trusting it to "be careful" from a
+  prompt alone is risky — a badly-phrased question could end up as an unrestricted query
+  over real data. Instead, I took query selection out of the LLM's hands completely: a
+  regex classifies the incoming question into one of a fixed set of known question types,
+  a parameterized Supabase query fetches exactly that data, and the LLM's only job is to
+  phrase the already-retrieved rows into a natural-language sentence. It never sees a raw
+  connection string and never writes its own filters — if a question doesn't match a
+  known type, the assistant says so directly instead of guessing at an answer. This was
+  made harder by also being new to Supabase and Postgres going into this project — coming
+  from a Laravel/MySQL background, I had to pick up Postgres SQL syntax, Row Level
+  Security policies, and Supabase's client/server query patterns at the same time as
+  designing this safety layer, rather than relying on tools I already knew well.
+- **What I'd improve for production**: add a customer-facing ordering flow, similar to
+  how Lalamove, ShopeeFood, or Foodpanda work, so customers can place their own service
+  requests directly instead of relying on admin staff to manually key in every order.
+  Alongside that, I'd build a promo/discount section so admins can offer customers special
+  pricing during festive seasons or other occasions — right now pricing is just a flat
+  quoted amount per job with no way to apply a campaign discount.
+- **AI tool usage while building**: built interactively with Claude Code, using a
+  planning-first workflow. I gave Claude the assessment spec and told it I needed to
+  deliver the full system within a 7-day timeline; Claude broke that down into a
+  day-by-day task plan covering the database schema, each module, and the bonus features.
+  I worked through that plan one day at a time, reviewing and testing each piece as it was
+  built rather than leaving everything to the end. Once every module was in place, I ran a
+  full round of User Acceptance Testing (UAT) — walking through each role's workflow
+  end-to-end as a real user would — to confirm there were no outstanding issues before
+  considering it complete.

@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, ChevronLeft, ChevronRight, Filter, Flag, ImageOff, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Filter, Flag, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabaseClient'
 import { generatePages } from '../../lib/pagination'
 import { useDebounce } from '../../hooks/useDebounce'
 import type { CompletionAttachment, Order, ServiceCompletion, Technician } from '../../types'
 import StatusBadge from '../../components/StatusBadge'
-import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card'
 import { Input } from '../../components/ui/input'
@@ -225,25 +224,19 @@ export default function ReviewQueue() {
                         {order.technicians?.name ?? '—'}
                       </p>
                     </div>
-                    <StatusBadge status={order.status} />
+                    <div className="flex items-center gap-2">
+                      {flagged && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+                          <Flag className="size-3" />
+                          Flagged
+                        </span>
+                      )}
+                      <StatusBadge status={order.status} />
+                    </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {completion ? (
                       <>
-                        {(overQuote || attachments.length === 0) && (
-                          <Alert variant={overQuote ? 'destructive' : 'warning'} className="py-2">
-                            {overQuote ? <AlertTriangle /> : <ImageOff />}
-                            <AlertDescription className="text-xs font-medium">
-                              {[
-                                overQuote && 'Final amount much higher than quoted',
-                                attachments.length === 0 && 'Job done but no photos uploaded',
-                              ]
-                                .filter(Boolean)
-                                .join('   ·   ')}
-                            </AlertDescription>
-                          </Alert>
-                        )}
-
                         <div className="grid grid-cols-3 gap-3 rounded-lg border bg-muted/40 px-3 py-2 text-center">
                           <div>
                             <p className="text-xs text-muted-foreground">Quoted</p>
