@@ -24,10 +24,13 @@ const SCOPE_NOTE =
 
 function ThinkingBubble() {
   return (
-    <div className="flex items-center gap-1 py-1">
-      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.3s]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.15s]" />
-      <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
+    <div className="flex items-center gap-2 py-1">
+      <div className="flex items-center gap-1">
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.3s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:-0.15s]" />
+        <span className="size-1.5 animate-bounce rounded-full bg-muted-foreground/50" />
+      </div>
+      <span className="text-xs text-muted-foreground">Thinking…</span>
     </div>
   )
 }
@@ -92,6 +95,7 @@ export default function AiQuery() {
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         placeholder="Ask about jobs, technicians, or completions…"
+        disabled={loading}
         className="h-auto border-0 bg-transparent px-0 py-1 shadow-none focus-visible:ring-0"
       />
       <Button
@@ -121,18 +125,24 @@ export default function AiQuery() {
 
           {composer}
 
-          <div className="flex flex-wrap justify-center gap-2">
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex}
-                type="button"
-                onClick={() => void ask(ex)}
-                className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                {ex}
-              </button>
-            ))}
-          </div>
+          {loading ? (
+            <div className="flex justify-center">
+              <ThinkingBubble />
+            </div>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-2">
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => void ask(ex)}
+                  className="rounded-full border bg-card px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <Info className="mt-0.5 size-3.5 shrink-0" />
