@@ -137,7 +137,7 @@ KPI Dashboard's Postpone/Reschedule column.
   state machine; RLS enforces *who* can update a given order, not which status values
   are reachable from which.
 - **AI query classification is deterministic, not LLM-driven**
-  (`api/_lib/aiQueryCore.ts`): the question is matched against a small set of regex
+  (`api/ai-query.ts`): the question is matched against a small set of regex
   patterns to pick one of three supported query shapes and a date range, which are then
   run as ordinary parameterized Supabase queries. DeepSeek is only called *after* the
   data is retrieved, purely to phrase the final sentence — it never decides what to
@@ -167,16 +167,16 @@ KPI Dashboard's Postpone/Reschedule column.
   there's no template fallback if DeepSeek is unavailable — there's no sensible
   non-AI way to turn raw OCR text into structured fields, so a missing key or failed
   call surfaces as an explicit error instead of a degraded answer.
-- **Server code lives outside `src/`, inside `api/_lib/`**: `src/` is compiled under a
-  browser-oriented `tsconfig` (DOM lib, no Node types). AI-query logic needs
-  `process.env` and runs server-side only, so it lives in its own `tsconfig.server.json`
-  scope, imported by both `api/ai-query.ts` (the real Vercel function) and a small Vite
-  dev-server middleware (`vite.config.ts`) that reuses the exact same function during
-  `npm run dev`, so the AI module is testable locally without `vercel dev`. It has to sit
-  inside `api/` specifically — Vercel's Node runtime only reliably bundles files that
-  live within the function's own directory tree; a sibling top-level `server/` folder
-  produced `ERR_MODULE_NOT_FOUND` at runtime because it wasn't included in the deployed
-  function at all.
+- **Each `api/*.ts` file is fully self-contained, no shared local modules**:
+  `src/` is compiled under a browser-oriented `tsconfig` (DOM lib, no Node types), so
+  server logic needing `process.env` lives under its own `tsconfig.server.json` scope
+  instead. It used to be split into a helper module (`server/`, later `api/_lib/`)
+  imported by the handler, but in production Vercel only reliably deploys the exact
+  `api/*.ts` entrypoint file — any sibling module it imported, inside `api/` or not,
+  came back `ERR_MODULE_NOT_FOUND` at runtime even though it worked fine locally. Each
+  handler now inlines its own logic instead. The Vite dev-server middleware
+  (`vite.config.ts`) `ssrLoadModule`s these same `api/*.ts` files directly, so the AI
+  modules stay testable locally without `vercel dev`.
 
 ## AI Query Types Supported
 

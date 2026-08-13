@@ -66,7 +66,7 @@ function colorForTechnician(name: string, index: number) {
 }
 
 // Same "overloaded" heuristic as the AI Operational Insight query
-// (api/_lib/aiQueryCore.ts) — surfaced directly on the leaderboard so a
+// (api/ai-query.ts) — surfaced directly on the leaderboard so a
 // manager sees it while scanning, without having to ask the AI assistant.
 const OVERLOAD_RATIO = 1.4
 const MIN_JOBS_FOR_OVERLOAD = 3
