@@ -24,7 +24,7 @@ function aiQueryDevMiddleware(env: Record<string, string>): Plugin {
         let raw = ''
         for await (const chunk of req) raw += chunk
         const { answerOperationsQuery, AiQueryAuthError } = await server.ssrLoadModule(
-          '/server/aiQueryCore.ts',
+          '/api/_lib/aiQueryCore.ts',
         )
         try {
           const body = raw ? JSON.parse(raw) : {}
@@ -79,7 +79,7 @@ function documentExtractDevMiddleware(env: Record<string, string>): Plugin {
         let raw = ''
         for await (const chunk of req) raw += chunk
         const { extractDocumentFields, DocumentExtractAuthError } = await server.ssrLoadModule(
-          '/server/documentExtractCore.ts',
+          '/api/_lib/documentExtractCore.ts',
         )
         try {
           const body = raw ? JSON.parse(raw) : {}

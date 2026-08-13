@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { DocumentExtractAuthError, extractDocumentFields } from '../server/documentExtractCore.ts'
+import { DocumentExtractAuthError, extractDocumentFields } from './_lib/documentExtractCore.ts'
 
 interface VercelLikeRequest {
   method?: string

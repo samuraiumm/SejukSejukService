@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
-import { MOCK_TECHNICIANS } from '../src/types/index.ts'
+
+// Duplicated from src/types (rather than imported) because Vercel serverless
+// functions only reliably bundle files that live inside the api/ directory.
+const MOCK_TECHNICIANS = ['Ali', 'John', 'Bala', 'Yusoff'] as const
 
 export interface AiQueryResult {
   answer: string

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { AiQueryAuthError, answerOperationsQuery } from '../server/aiQueryCore.ts'
+import { AiQueryAuthError, answerOperationsQuery } from './_lib/aiQueryCore.ts'
 
 interface VercelLikeRequest {
   method?: string
